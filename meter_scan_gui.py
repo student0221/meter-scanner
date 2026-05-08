@@ -442,16 +442,15 @@ class ModernMeterScannerGUI:
             self._create_modern_check(parent, str(val), var).pack(side='left', padx=8)
     
     def _create_modern_check(self, parent, text, var):
-        """创建现代化复选框 — 使用系统原生样式，但文字颜色反馈状态"""
+        """创建现代化复选框"""
         cb = tk.Checkbutton(parent, text=text, variable=var,
-                            bg=self.COLORS['card_bg'], 
+                            bg=self.COLORS['card_bg'],
                             activebackground=self.COLORS['card_bg_light'],
                             selectcolor=self.COLORS['card_bg'],
                             fg=self.COLORS['text_dim'],
                             activeforeground=self.COLORS['text'],
                             font=('Microsoft YaHei', 10),
                             cursor='hand2',
-                            selectforeground=self.COLORS['accent'],
                             highlightthickness=0)
         
         def update(*args):
