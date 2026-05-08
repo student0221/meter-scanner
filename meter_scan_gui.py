@@ -12,14 +12,14 @@ class MeterScannerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("DL/T 645-2007 电表通信参数探测工具")
-        self.root.geometry("900x700")
-        self.root.minsize(900, 700)
+        self.root.geometry("1000x750")
+        self.root.minsize(1000, 750)
         
         self.all_results = []
         self.success_results = []
         self.is_scanning = False
         self.scan_thread = None
-        self.ser = None  # 复用串口
+        self.ser = None
         
         self.build_ui()
         self.refresh_ports()
@@ -50,39 +50,56 @@ class MeterScannerGUI:
         scan_frame.pack(fill='x', padx=10, pady=5)
         
         # 波特率
-        ttk.Label(scan_frame, text="波特率:").grid(row=0, column=0, sticky='w')
+        ttk.Label(scan_frame, text="波特率:").grid(row=0, column=0, sticky='nw', pady=2)
         self.baud_frame = ttk.Frame(scan_frame)
-        self.baud_frame.grid(row=0, column=1, columnspan=4, sticky='w', padx=5)
+        self.baud_frame.grid(row=0, column=1, columnspan=5, sticky='w', padx=5, pady=2)
         self.baud_vars = {}
         for baud in [1200, 2400, 4800, 7200, 9600, 19200, 38400, 57600, 115200]:
             var = tk.BooleanVar(value=True)
             self.baud_vars[baud] = var
             ttk.Checkbutton(self.baud_frame, text=str(baud), variable=var).pack(side='left', padx=3)
         
-        # 基础参数
-        ttk.Label(scan_frame, text="数据位:").grid(row=1, column=0, sticky='w', pady=5)
-        self.data_var = tk.StringVar(value="8")
-        ttk.Combobox(scan_frame, textvariable=self.data_var, values=["7", "8"], width=5).grid(row=1, column=1, sticky='w', padx=5)
+        # 数据位
+        ttk.Label(scan_frame, text="数据位:").grid(row=1, column=0, sticky='nw', pady=2)
+        self.data_frame = ttk.Frame(scan_frame)
+        self.data_frame.grid(row=1, column=1, sticky='w', padx=5, pady=2)
+        self.data_vars = {}
+        for val, label in [(7, '7'), (8, '8')]:
+            var = tk.BooleanVar(value=(val == 8))
+            self.data_vars[val] = var
+            ttk.Checkbutton(self.data_frame, text=label, variable=var).pack(side='left', padx=5)
         
-        ttk.Label(scan_frame, text="校验位:").grid(row=1, column=2, sticky='w', padx=(15, 0))
-        self.parity_var = tk.StringVar(value="E")
-        ttk.Combobox(scan_frame, textvariable=self.parity_var, values=["N", "E", "O"], width=5).grid(row=1, column=3, sticky='w', padx=5)
+        # 校验位
+        ttk.Label(scan_frame, text="校验位:").grid(row=2, column=0, sticky='nw', pady=2)
+        self.parity_frame = ttk.Frame(scan_frame)
+        self.parity_frame.grid(row=2, column=1, sticky='w', padx=5, pady=2)
+        self.parity_vars = {}
+        for p, label in [('N', 'None'), ('E', 'Even'), ('O', 'Odd')]:
+            var = tk.BooleanVar(value=(p == 'E'))
+            self.parity_vars[p] = var
+            ttk.Checkbutton(self.parity_frame, text=label, variable=var).pack(side='left', padx=5)
         
-        ttk.Label(scan_frame, text="停止位:").grid(row=1, column=4, sticky='w', padx=(15, 0))
-        self.stop_var = tk.StringVar(value="1")
-        ttk.Combobox(scan_frame, textvariable=self.stop_var, values=["1", "2"], width=5).grid(row=1, column=5, sticky='w', padx=5)
+        # 停止位
+        ttk.Label(scan_frame, text="停止位:").grid(row=3, column=0, sticky='nw', pady=2)
+        self.stop_frame = ttk.Frame(scan_frame)
+        self.stop_frame.grid(row=3, column=1, sticky='w', padx=5, pady=2)
+        self.stop_vars = {}
+        for val, label in [(1, '1'), (2, '2')]:
+            var = tk.BooleanVar(value=(val == 1))
+            self.stop_vars[val] = var
+            ttk.Checkbutton(self.stop_frame, text=label, variable=var).pack(side='left', padx=5)
         
         # 超时 + 唤醒
-        ttk.Label(scan_frame, text="等待超时(ms):").grid(row=2, column=0, sticky='w', pady=5)
+        ttk.Label(scan_frame, text="等待超时(ms):").grid(row=4, column=0, sticky='w', pady=5)
         self.timeout_var = tk.StringVar(value="1500")
-        ttk.Entry(scan_frame, textvariable=self.timeout_var, width=10).grid(row=2, column=1, sticky='w', padx=5)
+        ttk.Entry(scan_frame, textvariable=self.timeout_var, width=10).grid(row=4, column=1, sticky='w', padx=5)
         
         self.wakeup_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(scan_frame, text="先发唤醒 FE", variable=self.wakeup_var).grid(row=2, column=2, columnspan=2, sticky='w', padx=5)
+        ttk.Checkbutton(scan_frame, text="先发唤醒 FE", variable=self.wakeup_var).grid(row=4, column=2, columnspan=2, sticky='w', padx=5)
         
-        # 串口开关 + 探测按钮
+        # 按钮行
         btn_frame = ttk.Frame(scan_frame)
-        btn_frame.grid(row=3, column=0, columnspan=6, sticky='w', pady=5)
+        btn_frame.grid(row=5, column=0, columnspan=6, sticky='w', pady=5)
         
         self.open_btn = ttk.Button(btn_frame, text="🔌 打开串口", command=self.open_serial, width=12)
         self.open_btn.pack(side='left', padx=5)
@@ -142,16 +159,11 @@ class MeterScannerGUI:
         if not port:
             messagebox.showwarning("提示", "请先选择串口")
             return
-        
         try:
             self.ser = serial.Serial(
-                port=port,
-                baudrate=9600,
-                bytesize=8,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=0.5,
-                write_timeout=1
+                port=port, baudrate=9600, bytesize=8,
+                parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
+                timeout=0.5, write_timeout=1
             )
             self.serial_status_var.set(f"串口: 已打开 | {port}")
             self.open_btn.config(state='disabled')
@@ -185,33 +197,29 @@ class MeterScannerGUI:
         return bytes(frame)
     
     def try_params(self, baud, databits, parity, stopbits, timeout_ms):
-        """使用已打开的串口尝试一组参数，动态重配置"""
+        """尝试一组参数，返回 (success, message, raw_bytes, addr)"""
+        addr = ''
         if not self.ser or not self.ser.is_open:
-            return False, "串口未打开", b''
+            return False, "串口未打开", b'', addr
         
         try:
-            # 动态重配置串口参数
             self.ser.baudrate = baud
             self.ser.bytesize = databits
             self.ser.parity = {'N': serial.PARITY_NONE, 'E': serial.PARITY_EVEN, 'O': serial.PARITY_ODD}[parity]
             self.ser.stopbits = {1: serial.STOPBITS_ONE, 2: serial.STOPBITS_TWO}[stopbits]
             self.ser.timeout = timeout_ms / 1000.0
             
-            # 清空缓冲区
             self.ser.reset_input_buffer()
             self.ser.reset_output_buffer()
-            time.sleep(0.05)  # 参数切换后稍等
+            time.sleep(0.05)
             
-            # 发送唤醒
             if self.wakeup_var.get():
                 self.ser.write(bytes([0xFE, 0xFE, 0xFE, 0xFE]))
                 time.sleep(0.1)
             
-            # 发送读地址报文
             self.ser.write(self.build_read_addr_frame())
             self.ser.flush()
             
-            # 读取回复
             response = b''
             deadline = time.time() + (timeout_ms / 1000.0)
             while time.time() < deadline:
@@ -223,31 +231,47 @@ class MeterScannerGUI:
                 time.sleep(0.05)
             
             if len(response) == 0:
-                return False, "无应答", b''
+                return False, "无应答", b'', addr
             
-            # 去掉 FE 前缀
             clean = self.strip_fe_prefix(response)
             if len(clean) < 12:
-                return False, f"数据过短(去FE后{len(clean)}字节)", response
+                return False, f"数据过短(去FE后{len(clean)}字节)", response, addr
             
             if clean[0] != 0x68 or clean[7] != 0x68 or clean[-1] != 0x16:
-                return False, "帧头/帧尾错误", response
+                return False, "帧头/帧尾错误", response, addr
             
-            cs = self.calc_checksum(clean[:-2])
-            if cs != clean[-2]:
-                return False, f"校验码错误(计算{cs:02X}!=收到{clean[-2]:02X})", response
+            cs_calc = self.calc_checksum(clean[:-2])
+            cs_recv = clean[-2]
+            if cs_calc != cs_recv:
+                return False, f"校验码错误(计算{cs_calc:02X}!=收到{cs_recv:02X})", response, addr
             
             ctrl = clean[8]
+            l = clean[9]
+            data_start = 10
+            cs_pos = data_start + l
+            
+            if len(clean) < cs_pos + 2:
+                return False, f"帧长度不足(需{cs_pos+2}, 实{len(clean)})", response, addr
+            
             if ctrl == 0x93:
-                addr = clean[10:16].hex().upper() if len(clean) > 15 else ''
-                return True, f"地址: {addr}", response
+                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)
+                if l >= 10 and len(clean) >= data_start + 10 + 2:
+                    di = clean[data_start:data_start + 4].hex().upper()
+                    addr_bytes = clean[data_start + 4:data_start + 10]
+                    addr = addr_bytes.hex().upper()
+                    return True, f"地址:{addr} DI:{di}", response, addr
+                elif l > 0:
+                    data_hex = clean[data_start:data_start + l].hex().upper()
+                    return True, f"应答 L={l} 数据:{data_hex}", response, addr
+                else:
+                    return True, "应答(无数据)", response, addr
             elif ctrl == 0xD1:
-                return True, f"异常应答", response
+                return True, "异常应答", response, addr
             else:
-                return False, f"未知控制码{ctrl:02X}", response
+                return False, f"未知控制码{ctrl:02X}", response, addr
                 
         except Exception as e:
-            return False, str(e), b''
+            return False, str(e), b'', addr
     
     def scan_worker(self):
         if not self.ser or not self.ser.is_open:
@@ -256,10 +280,27 @@ class MeterScannerGUI:
             return
         
         baudrates = [b for b, v in self.baud_vars.items() if v.get()]
-        databits = [int(self.data_var.get())]
-        parities = [self.parity_var.get()]
-        stopbits = [int(self.stop_var.get())]
+        databits = [d for d, v in self.data_vars.items() if v.get()]
+        parities = [p for p, v in self.parity_vars.items() if v.get()]
+        stopbits = [s for s, v in self.stop_vars.items() if v.get()]
         timeout_ms = int(self.timeout_var.get() or 1500)
+        
+        if not baudrates:
+            self.log("错误: 请至少选择一个波特率", 'fail')
+            self.is_scanning = False
+            return
+        if not databits:
+            self.log("错误: 请至少选择一个数据位", 'fail')
+            self.is_scanning = False
+            return
+        if not parities:
+            self.log("错误: 请至少选择一个校验位", 'fail')
+            self.is_scanning = False
+            return
+        if not stopbits:
+            self.log("错误: 请至少选择一个停止位", 'fail')
+            self.is_scanning = False
+            return
         
         total = len(baudrates) * len(databits) * len(parities) * len(stopbits)
         count = 0
@@ -286,19 +327,19 @@ class MeterScannerGUI:
                         self.progress['value'] = (count / total) * 100
                         self.log(f"[{count}/{total}] {params} (超时{timeout_ms}ms) ...", 'trying')
                         
-                        ok, msg, raw = self.try_params(baud, databit, parity, stopbit, timeout_ms)
+                        ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
                         
                         result = {
                             'baud': baud, 'databits': databit, 'parity': parity,
                             'stopbits': stopbit, 'success': ok, 'message': msg,
                             'raw': raw.hex().upper() if raw else '',
+                            'addr': addr,
                             'timestamp': datetime.now().strftime("%H:%M:%S")
                         }
                         self.all_results.append(result)
                         
                         if ok:
                             self.log(f"  ✅ 成功! {msg}", 'success')
-                            result['addr'] = raw[10:16].hex().upper() if len(raw) > 15 and raw[8] == 0x93 else ''
                             self.success_results.append(result)
                             self.result_tree.insert('', 'end', values=(params, msg, raw.hex().upper()))
                         else:
@@ -327,7 +368,6 @@ class MeterScannerGUI:
     def start_scan(self):
         if self.is_scanning:
             return
-        
         self.is_scanning = True
         self.scan_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
@@ -363,12 +403,12 @@ class MeterScannerGUI:
             with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位', 
-                                '结果', '详情', '原始应答报文', '时间戳'])
+                                '结果', '详情', '电表地址', '原始应答报文', '时间戳'])
                 for i, r in enumerate(self.all_results, 1):
                     writer.writerow([
                         i, r['baud'], r['databits'], r['parity'], r['stopbits'],
                         '成功' if r['success'] else '失败',
-                        r['message'], r['raw'], r['timestamp']
+                        r['message'], r['addr'], r['raw'], r['timestamp']
                     ])
             
             if self.success_results:
