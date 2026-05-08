@@ -131,7 +131,7 @@ class MeterScannerGUI:
         
         self.result_tree = ttk.Treeview(result_frame, columns=('params', 'address', 'raw'), show='headings', height=3)
         self.result_tree.heading('params', text='通信参数')
-        self.result_tree.heading('address', text='电表地址/结果')
+        self.result_tree.heading('address', text='地址')
         self.result_tree.heading('raw', text='原始应答报文')
         self.result_tree.column('params', width=150)
         self.result_tree.column('address', width=250)
@@ -254,19 +254,22 @@ class MeterScannerGUI:
                 return False, f"帧长度不足(需{cs_pos+2}, 实{len(clean)})", response, addr
             
             if ctrl == 0x93:
-                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)，地址值低字节在前，需倒序
-                if l >= 10 and len(clean) >= data_start + 10 + 2:
+                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)，或仅地址值(6B)
+                # 某些电表简化格式，L=6 直接返回地址
+                if l == 6 and len(clean) >= data_start + 6 + 2:
+                    addr_bytes = clean[data_start:data_start + 6]
+                    addr_reversed = addr_bytes[::-1].hex().upper()
+                    return True, f"地址:{addr_reversed}", response, addr_reversed
+                elif l >= 10 and len(clean) >= data_start + 10 + 2:
                     di = clean[data_start:data_start + 4].hex().upper()
                     addr_bytes = clean[data_start + 4:data_start + 10]
-                    # DL/T 645-2007 地址低字节在前，倒序为正序
                     addr_reversed = addr_bytes[::-1].hex().upper()
-                    addr_raw = addr_bytes.hex().upper()
                     return True, f"地址:{addr_reversed} DI:{di}", response, addr_reversed
                 elif l > 0:
                     data_hex = clean[data_start:data_start + l].hex().upper()
-                    return True, f"应答 L={l} 数据:{data_hex}", response, ''
+                    return True, f"应答 L={l}", response, ''
                 else:
-                    return True, "应答(无数据)", response, addr
+                    return True, "应答(无数据)", response, ''
             elif ctrl == 0xD1:
                 return True, "异常应答", response, addr
             else:
@@ -343,7 +346,8 @@ class MeterScannerGUI:
                         if ok:
                             self.log(f"  ✅ 成功! {msg}", 'success')
                             self.success_results.append(result)
-                            self.result_tree.insert('', 'end', values=(params, msg, raw.hex().upper()))
+                            display_addr = addr if addr else msg
+                            self.result_tree.insert('', 'end', values=(params, display_addr, raw.hex().upper()))
                         else:
                             self.log(f"  ❌ {msg}", 'fail')
                         
@@ -405,7 +409,7 @@ class MeterScannerGUI:
             with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位', 
-                                '结果', '详情', '电表地址', '原始应答报文', '时间戳'])
+                                '结果', '详情', '地址', '原始应答报文', '时间戳'])
                 for i, r in enumerate(self.all_results, 1):
                     writer.writerow([
                         i, r['baud'], r['databits'], r['parity'], r['stopbits'],
@@ -418,11 +422,11 @@ class MeterScannerGUI:
                 with open(summary_path, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
                     writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位', 
-                                    '电表地址/结果', '原始报文', '推荐'])
+                                    '地址', '原始报文', '推荐'])
                     for i, r in enumerate(self.success_results, 1):
                         writer.writerow([
                             i, r['baud'], r['databits'], r['parity'], r['stopbits'],
-                            r['message'], r['raw'], '★ 推荐' if i == 1 else ''
+                            r['addr'] if r['addr'] else r['message'], r['raw'], '★ 推荐' if i == 1 else ''
                         ])
                 
                 messagebox.showinfo("导出成功", 
