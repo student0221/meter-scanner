@@ -65,9 +65,15 @@ class MeterScannerGUI:
         ttk.Radiobutton(config_frame, text="1", variable=self.stop_var, value="1").grid(row=4, column=1, sticky='w')
         ttk.Radiobutton(config_frame, text="2", variable=self.stop_var, value="2").grid(row=4, column=1, padx=50, sticky='w')
         
+        ttk.Label(config_frame, text="等待超时(ms):").grid(row=6, column=0, sticky='w', pady=5)
+        self.timeout_var = tk.StringVar(value="1500")
+        self.timeout_entry = ttk.Entry(config_frame, textvariable=self.timeout_var, width=10)
+        self.timeout_entry.grid(row=6, column=1, sticky='w', padx=5)
+        ttk.Label(config_frame, text="发完报文后等待应答的时间，超时则切换下一组参数").grid(row=6, column=2, sticky='w')
+        
         # 唤醒选项
         self.wakeup_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(config_frame, text="发送唤醒字节 (FE FE FE FE)", variable=self.wakeup_var).grid(row=5, column=0, columnspan=3, sticky='w', pady=5)
+        ttk.Checkbutton(config_frame, text="发送唤醒字节 (FE FE FE FE)", variable=self.wakeup_var).grid(row=7, column=0, columnspan=3, sticky='w', pady=5)
         
         # ===== 按钮区 =====
         btn_frame = ttk.Frame(self.root)
@@ -136,13 +142,17 @@ class MeterScannerGUI:
     
     def try_once(self, port, baud, databits, parity, stopbits):
         try:
+            # 使用用户设置的超时时间（毫秒转秒）
+            timeout_ms = int(self.timeout_var.get() or 1500)
+            timeout_sec = timeout_ms / 1000.0
+            
             ser = serial.Serial(
                 port=port,
                 baudrate=baud,
                 bytesize=databits,
                 parity={'N': serial.PARITY_NONE, 'E': serial.PARITY_EVEN, 'O': serial.PARITY_ODD}[parity],
                 stopbits={1: serial.STOPBITS_ONE, 2: serial.STOPBITS_TWO}[stopbits],
-                timeout=1.5,
+                timeout=timeout_sec,
                 write_timeout=1
             )
             
@@ -155,10 +165,9 @@ class MeterScannerGUI:
             
             ser.write(self.build_frame())
             ser.flush()
-            time.sleep(0.2)
             
             response = b''
-            deadline = time.time() + 1.5
+            deadline = time.time() + timeout_sec
             while time.time() < deadline:
                 if ser.in_waiting > 0:
                     chunk = ser.read(ser.in_waiting)
@@ -179,7 +188,7 @@ class MeterScannerGUI:
                     elif ctrl == 0xD1:
                         return True, f"异常应答", response
             
-            return False, "无有效应答" if len(response) == 0 else "帧格式错误", response
+            return False, f"无有效应答 (超时{timeout_ms}ms)" if len(response) == 0 else "帧格式错误", response
             
         except Exception as e:
             return False, str(e), b''

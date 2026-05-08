@@ -23,7 +23,11 @@ BAUDRATES = [1200, 2400, 4800, 7200, 9600, 19200, 38400, 57600, 115200]
 DATABITS = [8, 7]
 PARITIES = ['N', 'E', 'O']
 STOPBITS = [1, 2]
-RESPONSE_TIMEOUT = 1.5
+
+# 超时设置（毫秒）：发完报文后等待应答的时间
+RESPONSE_TIMEOUT_MS = 1500
+
+# 两次尝试之间的间隔（秒）
 RETRY_DELAY = 0.5
 
 
@@ -210,6 +214,7 @@ def parse_stopbits(s):
 
 def try_communication(port, baud, databits, parity, stopbits):
     """尝试用指定参数通信，返回 (success, message, raw_response)"""
+    timeout_sec = RESPONSE_TIMEOUT_MS / 1000.0
     try:
         ser = serial.Serial(
             port=port,
@@ -217,7 +222,7 @@ def try_communication(port, baud, databits, parity, stopbits):
             bytesize=databits,
             parity=parse_parity(parity),
             stopbits=parse_stopbits(stopbits),
-            timeout=RESPONSE_TIMEOUT,
+            timeout=timeout_sec,
             write_timeout=1
         )
         
@@ -235,11 +240,11 @@ def try_communication(port, baud, databits, parity, stopbits):
         
         # 等待并读取应答
         ser.flush()
-        time.sleep(0.2)  # 给电表一点处理时间（Td: 20ms~500ms）
+        time.sleep(0.1)  # 给电表一点处理时间（Td: 20ms~500ms）
         
         # 读取所有可用数据
         response = b''
-        deadline = time.time() + RESPONSE_TIMEOUT
+        deadline = time.time() + timeout_sec
         while time.time() < deadline:
             if ser.in_waiting > 0:
                 chunk = ser.read(ser.in_waiting)
