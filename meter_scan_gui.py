@@ -345,19 +345,34 @@ class MeterScannerGUI:
                         self.progress['value'] = (count / total) * 100
                         self.log(f"[{count}/{total}] {params} (超时{timeout_ms}ms) ...", 'trying')
                         
+                        # 记录 TX
+                        tx_hex = self.build_read_addr_frame().hex().upper()
+                        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                        if self.wakeup_var.get():
+                            self.log(f"[{ts}] TX: FE FE FE FE {tx_hex}")
+                        else:
+                            self.log(f"[{ts}] TX: {tx_hex}")
+                        
                         ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
+                        
+                        # 记录 RX
+                        if raw:
+                            ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                            self.log(f"[{ts_rx}] RX: {raw.hex().upper()}")
+                        else:
+                            self.log("RX: (无应答)")
                         
                         result = {
                             'baud': baud, 'databits': databit, 'parity': parity,
                             'stopbits': stopbit, 'success': ok, 'message': msg,
                             'raw': raw.hex().upper() if raw else '',
                             'addr': addr,
-                            'timestamp': datetime.now().strftime("%H:%M:%S")
+                            'timestamp': ts
                         }
                         self.all_results.append(result)
                         
                         if ok:
-                            self.log(f"  ✅ 成功! {msg}", 'success')
+                            self.log(f"  ✅ {msg}", 'success')
                             self.success_results.append(result)
                             display_addr = addr if addr else msg
                             self.result_tree.insert('', 'end', values=(params, display_addr, raw.hex().upper()))
