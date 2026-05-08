@@ -442,20 +442,20 @@ class ModernMeterScannerGUI:
             self._create_modern_check(parent, str(val), var).pack(side='left', padx=8)
     
     def _create_modern_check(self, parent, text, var):
-        """创建现代化复选框"""
-        cb = tk.Checkbutton(parent, text=f"☐ {text}", variable=var,
-                            indicatoron=False, relief='flat',
+        """创建现代化复选框 — 使用系统原生样式，但文字颜色反馈状态"""
+        cb = tk.Checkbutton(parent, text=text, variable=var,
                             bg=self.COLORS['card_bg'], 
                             activebackground=self.COLORS['card_bg_light'],
                             selectcolor=self.COLORS['card_bg'],
-                            fg=self.COLORS['text'],
+                            fg=self.COLORS['text_dim'],
                             activeforeground=self.COLORS['text'],
                             font=('Microsoft YaHei', 10),
-                            cursor='hand2')
+                            cursor='hand2',
+                            selectforeground=self.COLORS['accent'],
+                            highlightthickness=0)
         
         def update(*args):
-            cb.config(text=f"☑ {text}" if var.get() else f"☐ {text}",
-                     fg=self.COLORS['accent'] if var.get() else self.COLORS['text'])
+            cb.config(fg=self.COLORS['accent'] if var.get() else self.COLORS['text_dim'])
         
         var.trace_add('write', update)
         return cb
@@ -570,22 +570,16 @@ class ModernMeterScannerGUI:
                         tx_hex = self.build_read_addr_frame().hex().upper()
                         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                         if self.wakeup_var.get():
-                            self.log(f"[{ts}] ", end='')
-                            self.log("TX: ", end='', tag='tx')
-                            self.log(f"FE FE FE FE {tx_hex}")
+                            self.log(f"[{ts}] TX: FE FE FE FE {tx_hex}")
                         else:
-                            self.log(f"[{ts}] ", end='')
-                            self.log("TX: ", end='', tag='tx')
-                            self.log(tx_hex)
+                            self.log(f"[{ts}] TX: {tx_hex}")
                         
                         ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
                         
                         # 记录 RX
                         if raw:
                             ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                            self.log(f"[{ts_rx}] ", end='')
-                            self.log("RX: ", end='', tag='rx')
-                            self.log(raw.hex().upper())
+                            self.log(f"[{ts_rx}] RX: {raw.hex().upper()}")
                         else:
                             self.log("RX: (无应答)")
                         
@@ -780,9 +774,15 @@ class ModernMeterScannerGUI:
         self.log_text.delete('1.0', 'end')
     
     def log(self, msg, tag=''):
-        """记录日志"""
-        self.log_text.insert('end', f"{msg}\n", tag)
-        self.log_text.see('end')
+        """线程安全的日志记录"""
+        def _do_log():
+            self.log_text.insert('end', f"{msg}\n", tag)
+            self.log_text.see('end')
+        
+        if threading.current_thread() is threading.main_thread():
+            _do_log()
+        else:
+            self.root.after(0, _do_log)
     
     def on_tree_double_click(self, event):
         """双击复制结果"""
