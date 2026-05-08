@@ -8,12 +8,43 @@ import csv
 from datetime import datetime
 
 
-class MeterScannerGUI:
+class ModernMeterScannerGUI:
+    """DL/T 645-2007 电表通信参数探测工具 — 现代化 UI 版本"""
+    
+    # 配色方案
+    COLORS = {
+        'bg': '#1a1a2e',
+        'card_bg': '#16213e',
+        'card_bg_light': '#1e2a4a',
+        'accent': '#e94560',
+        'accent_hover': '#c73d55',
+        'text': '#eaeaea',
+        'text_secondary': '#a0a0a0',
+        'text_dim': '#6a6a8a',
+        'success': '#00d9a6',
+        'warning': '#ffc107',
+        'error': '#ff4757',
+        'border': '#2a2a4a',
+        'input_bg': '#0f0f23',
+        'button_bg': '#e94560',
+        'button_secondary': '#2a2a5a',
+        'progress_bg': '#0f0f23',
+        'progress_fg': '#e94560',
+    }
+    
     def __init__(self, root):
         self.root = root
         self.root.title("DL/T 645-2007 电表通信参数探测工具")
-        self.root.geometry("1000x750")
+        self.root.geometry("1100x850")
         self.root.minsize(1000, 750)
+        self.root.configure(bg=self.COLORS['bg'])
+        
+        # 尝试设置 DPI 感知
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            pass
         
         self.all_results = []
         self.success_results = []
@@ -21,196 +52,578 @@ class MeterScannerGUI:
         self.scan_thread = None
         self.ser = None
         
+        self._setup_styles()
         self.build_ui()
         self.refresh_ports()
     
-    def create_check(self, parent, text, var):
-        """自定义复选框：☑ 选中 / ☐ 未选中"""
-        cb = tk.Checkbutton(parent, text=f"☐ {text}", variable=var,
-                            indicatoron=False, relief='flat',
-                            bg='#f0f0f0', activebackground='#e0e0e0',
-                            selectcolor='#f0f0f0', font=('Microsoft YaHei', 9))
+    def _setup_styles(self):
+        """配置 ttk 样式"""
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
         
-        def update(*args):
-            cb.config(text=f"☑ {text}" if var.get() else f"☐ {text}")
+        # 全局配置
+        self.style.configure('.',
+            background=self.COLORS['bg'],
+            foreground=self.COLORS['text'],
+            fieldbackground=self.COLORS['input_bg'],
+            font=('Microsoft YaHei', 10))
         
-        var.trace_add('write', update)
-        return cb
-
+        # 标签
+        self.style.configure('TLabel',
+            background=self.COLORS['bg'],
+            foreground=self.COLORS['text'],
+            font=('Microsoft YaHei', 10))
+        
+        self.style.configure('TLabel',
+            background=self.COLORS['bg'],
+            foreground=self.COLORS['text_secondary'],
+            font=('Microsoft YaHei', 9))
+        
+        # 标签框架
+        self.style.configure('Card.TLabelframe',
+            background=self.COLORS['card_bg'],
+            foreground=self.COLORS['text'],
+            borderwidth=1,
+            relief='solid',
+            font=('Microsoft YaHei', 10, 'bold'))
+        
+        self.style.configure('Card.TLabelframe.Label',
+            background=self.COLORS['card_bg'],
+            foreground=self.COLORS['accent'],
+            font=('Microsoft YaHei', 11, 'bold'))
+        
+        # 按钮
+        self.style.configure('Accent.TButton',
+            background=self.COLORS['button_bg'],
+            foreground='#ffffff',
+            font=('Microsoft YaHei', 10, 'bold'),
+            padding=(20, 8),
+            relief='flat',
+            borderwidth=0)
+        
+        self.style.map('Accent.TButton',
+            background=[('active', self.COLORS['accent_hover']), ('pressed', self.COLORS['accent_hover'])],
+            foreground=[('active', '#ffffff')])
+        
+        self.style.configure('Secondary.TButton',
+            background=self.COLORS['button_secondary'],
+            foreground=self.COLORS['text'],
+            font=('Microsoft YaHei', 10),
+            padding=(15, 6),
+            relief='flat',
+            borderwidth=0)
+        
+        self.style.map('Secondary.TButton',
+            background=[('active', '#3a3a6a'), ('pressed', '#3a3a6a')],
+            foreground=[('active', self.COLORS['text'])])
+        
+        # 下拉框
+        self.style.configure('TCombobox',
+            fieldbackground=self.COLORS['input_bg'],
+            background=self.COLORS['card_bg'],
+            foreground=self.COLORS['text'],
+            arrowcolor=self.COLORS['accent'],
+            padding=5)
+        
+        # 进度条
+        self.style.configure('Horizontal.TProgressbar',
+            background=self.COLORS['progress_fg'],
+            troughcolor=self.COLORS['progress_bg'],
+            borderwidth=0,
+            lightcolor=self.COLORS['progress_fg'],
+            darkcolor=self.COLORS['progress_fg'])
+        
+        # 树形视图
+        self.style.configure('Custom.Treeview',
+            background=self.COLORS['card_bg'],
+            foreground=self.COLORS['text'],
+            fieldbackground=self.COLORS['card_bg'],
+            rowheight=28,
+            font=('Consolas', 10))
+        
+        self.style.configure('Custom.Treeview.Heading',
+            background=self.COLORS['card_bg_light'],
+            foreground=self.COLORS['accent'],
+            font=('Microsoft YaHei', 10, 'bold'),
+            relief='flat')
+        
+        self.style.map('Custom.Treeview',
+            background=[('selected', self.COLORS['accent_hover'])],
+            foreground=[('selected', '#ffffff')])
+    
     def build_ui(self):
-        # ===== 串口选择 =====
-        port_frame = ttk.Frame(self.root)
-        port_frame.pack(fill='x', padx=10, pady=5)
+        """构建现代化 UI"""
+        # 主容器
+        main_frame = tk.Frame(self.root, bg=self.COLORS['bg'])
+        main_frame.pack(fill='both', expand=True, padx=15, pady=15)
         
-        ttk.Label(port_frame, text="串口:").pack(side='left')
+        # ===== 标题栏 =====
+        header = tk.Frame(main_frame, bg=self.COLORS['bg'])
+        header.pack(fill='x', pady=(0, 15))
+        
+        tk.Label(header, text="⚡", font=('Segoe UI', 24), 
+                bg=self.COLORS['bg'], fg=self.COLORS['accent']).pack(side='left')
+        
+        title_frame = tk.Frame(header, bg=self.COLORS['bg'])
+        title_frame.pack(side='left', padx=(10, 0))
+        
+        tk.Label(title_frame, text="DL/T 645-2007", 
+                font=('Microsoft YaHei', 16, 'bold'),
+                bg=self.COLORS['bg'], fg=self.COLORS['text']).pack(anchor='w')
+        
+        tk.Label(title_frame, text="电表通信参数探测工具", 
+                font=('Microsoft YaHei', 11),
+                bg=self.COLORS['bg'], fg=self.COLORS['text_secondary']).pack(anchor='w')
+        
+        # 串口状态指示器
+        self.status_indicator = tk.Canvas(header, width=12, height=12, 
+                                         bg=self.COLORS['bg'], highlightthickness=0)
+        self.status_indicator.pack(side='right', padx=5)
+        self._draw_status_circle('gray')
+        
+        self.serial_status_label = tk.Label(header, text="串口未连接",
+                                           font=('Microsoft YaHei', 10),
+                                           bg=self.COLORS['bg'], fg=self.COLORS['text_dim'])
+        self.serial_status_label.pack(side='right')
+        
+        # ===== 串口配置卡片 =====
+        port_card = tk.LabelFrame(main_frame, text=" 串口配置 ", 
+                                  bg=self.COLORS['card_bg'],
+                                  fg=self.COLORS['accent'],
+                                  font=('Microsoft YaHei', 11, 'bold'),
+                                  padx=15, pady=12,
+                                  relief='solid', borderwidth=1)
+        port_card.pack(fill='x', pady=(0, 10))
+        
+        port_inner = tk.Frame(port_card, bg=self.COLORS['card_bg'])
+        port_inner.pack(fill='x')
+        
+        # 串口选择
+        tk.Label(port_inner, text="串口", font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_secondary']).grid(row=0, column=0, sticky='w')
+        
         self.port_var = tk.StringVar()
-        self.port_combo = ttk.Combobox(port_frame, textvariable=self.port_var, width=25)
-        self.port_combo.pack(side='left', padx=5)
-        ttk.Button(port_frame, text="刷新", command=self.refresh_ports, width=6).pack(side='left', padx=3)
+        self.port_combo = ttk.Combobox(port_inner, textvariable=self.port_var, 
+                                       width=18, font=('Consolas', 10))
+        self.port_combo.grid(row=0, column=1, padx=(8, 15), sticky='w')
         
-        self.serial_status_var = tk.StringVar(value="串口: 未打开")
-        ttk.Label(port_frame, textvariable=self.serial_status_var, foreground='gray').pack(side='left', padx=(15, 0))
+        ttk.Button(port_inner, text="🔄 刷新", command=self.refresh_ports,
+                  style='Secondary.TButton', width=10).grid(row=0, column=2, padx=(0, 15))
         
-        # ===== 通信日志 =====
-        log_frame = ttk.LabelFrame(self.root, text="通信日志", padding=5)
-        log_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        # 串口开关按钮
+        self.open_btn = tk.Button(port_inner, text="🔌 打开串口", 
+                                  font=('Microsoft YaHei', 10, 'bold'),
+                                  bg=self.COLORS['success'], fg='#ffffff',
+                                  activebackground='#00b894',
+                                  relief='flat', padx=20, pady=6,
+                                  cursor='hand2', command=self.open_serial)
+        self.open_btn.grid(row=0, column=3, padx=(0, 8))
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, wrap='word', font=('Consolas', 10))
-        self.log_text.pack(fill='both', expand=True)
+        self.close_btn = tk.Button(port_inner, text="🔒 关闭串口",
+                                   font=('Microsoft YaHei', 10),
+                                   bg=self.COLORS['button_secondary'], 
+                                   fg=self.COLORS['text'],
+                                   activebackground='#3a3a6a',
+                                   relief='flat', padx=20, pady=6,
+                                   cursor='hand2', command=self.close_serial,
+                                   state='disabled')
+        self.close_btn.grid(row=0, column=4)
         
-        # ===== 自动探测区 =====
-        scan_frame = ttk.LabelFrame(self.root, text="自动探测", padding=10)
-        scan_frame.pack(fill='x', padx=10, pady=5)
+        # ===== 自动探测卡片 =====
+        scan_card = tk.LabelFrame(main_frame, text=" 自动探测 ",
+                                  bg=self.COLORS['card_bg'],
+                                  fg=self.COLORS['accent'],
+                                  font=('Microsoft YaHei', 11, 'bold'),
+                                  padx=15, pady=12,
+                                  relief='solid', borderwidth=1)
+        scan_card.pack(fill='x', pady=(0, 10))
+        
+        scan_inner = tk.Frame(scan_card, bg=self.COLORS['card_bg'])
+        scan_inner.pack(fill='x')
         
         # 波特率
-        ttk.Label(scan_frame, text="波特率:").grid(row=0, column=0, sticky='nw', pady=2)
-        self.baud_frame = ttk.Frame(scan_frame)
-        self.baud_frame.grid(row=0, column=1, columnspan=5, sticky='w', padx=5, pady=2)
+        self._create_option_row(scan_inner, 0, "波特率", self._create_baud_checks)
+        self._create_option_row(scan_inner, 1, "数据位", self._create_data_checks)
+        self._create_option_row(scan_inner, 2, "校验位", self._create_parity_checks)
+        self._create_option_row(scan_inner, 3, "停止位", self._create_stop_checks)
+        
+        # 超时和唤醒
+        tk.Label(scan_inner, text="等待超时", font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_secondary']).grid(row=4, column=0, sticky='w', pady=(8, 0))
+        
+        timeout_frame = tk.Frame(scan_inner, bg=self.COLORS['card_bg'])
+        timeout_frame.grid(row=4, column=1, sticky='w', pady=(8, 0), padx=(8, 0))
+        
+        self.timeout_var = tk.StringVar(value="1500")
+        timeout_entry = tk.Entry(timeout_frame, textvariable=self.timeout_var,
+                                width=8, font=('Consolas', 11),
+                                bg=self.COLORS['input_bg'], fg=self.COLORS['text'],
+                                relief='solid', borderwidth=1,
+                                highlightbackground=self.COLORS['border'],
+                                highlightcolor=self.COLORS['accent'],
+                                justify='center')
+        timeout_entry.pack(side='left')
+        tk.Label(timeout_frame, text="ms", font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_dim']).pack(side='left', padx=(5, 20))
+        
+        self.wakeup_var = tk.BooleanVar(value=True)
+        wakeup_cb = self._create_modern_check(timeout_frame, "先发唤醒 FE", self.wakeup_var)
+        wakeup_cb.pack(side='left', padx=(15, 0))
+        
+        # 操作按钮行
+        btn_row = tk.Frame(scan_inner, bg=self.COLORS['card_bg'])
+        btn_row.grid(row=5, column=0, columnspan=6, sticky='w', pady=(15, 5))
+        
+        self.scan_btn = tk.Button(btn_row, text="▶ 开始探测",
+                                  font=('Microsoft YaHei', 11, 'bold'),
+                                  bg=self.COLORS['button_bg'], fg='#ffffff',
+                                  activebackground=self.COLORS['accent_hover'],
+                                  relief='flat', padx=30, pady=8,
+                                  cursor='hand2', command=self.start_scan)
+        self.scan_btn.pack(side='left', padx=(0, 10))
+        
+        self.stop_btn = tk.Button(btn_row, text="⏹ 停止",
+                                  font=('Microsoft YaHei', 11),
+                                  bg=self.COLORS['button_secondary'], 
+                                  fg=self.COLORS['text'],
+                                  activebackground='#3a3a6a',
+                                  relief='flat', padx=25, pady=8,
+                                  cursor='hand2', command=self.stop_scan,
+                                  state='disabled')
+        self.stop_btn.pack(side='left', padx=(0, 10))
+        
+        self.export_btn = tk.Button(btn_row, text="📄 导出 CSV",
+                                    font=('Microsoft YaHei', 11),
+                                    bg=self.COLORS['button_secondary'],
+                                    fg=self.COLORS['text'],
+                                    activebackground='#3a3a6a',
+                                    relief='flat', padx=25, pady=8,
+                                    cursor='hand2', command=self.export_csv,
+                                    state='disabled')
+        self.export_btn.pack(side='left', padx=(0, 10))
+        
+        tk.Button(btn_row, text="🗑 清空日志",
+                  font=('Microsoft YaHei', 10),
+                  bg=self.COLORS['card_bg'], fg=self.COLORS['text_dim'],
+                  activebackground=self.COLORS['card_bg_light'],
+                  relief='flat', padx=15, pady=6,
+                  cursor='hand2', command=self.clear_log).pack(side='left')
+        
+        # ===== 进度条 =====
+        progress_frame = tk.Frame(main_frame, bg=self.COLORS['bg'])
+        progress_frame.pack(fill='x', pady=(0, 8))
+        
+        self.progress = ttk.Progressbar(progress_frame, mode='determinate',
+                                        style='Horizontal.TProgressbar')
+        self.progress.pack(fill='x')
+        
+        self.status_var = tk.StringVar(value="就绪 | 先打开串口，再开始探测")
+        tk.Label(progress_frame, textvariable=self.status_var,
+                font=('Microsoft YaHei', 10),
+                bg=self.COLORS['bg'], fg=self.COLORS['text_secondary']).pack(anchor='w', pady=(5, 0))
+        
+        # ===== 左右分栏：日志 + 结果 =====
+        content_frame = tk.Frame(main_frame, bg=self.COLORS['bg'])
+        content_frame.pack(fill='both', expand=True)
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(1, weight=1)
+        content_frame.rowconfigure(0, weight=1)
+        
+        # 日志区域
+        log_card = tk.LabelFrame(content_frame, text=" 通信日志 ",
+                                 bg=self.COLORS['card_bg'],
+                                 fg=self.COLORS['accent'],
+                                 font=('Microsoft YaHei', 11, 'bold'),
+                                 padx=10, pady=10,
+                                 relief='solid', borderwidth=1)
+        log_card.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
+        
+        self.log_text = scrolledtext.ScrolledText(
+            log_card, wrap='word',
+            font=('Consolas', 10),
+            bg=self.COLORS['input_bg'], fg=self.COLORS['text'],
+            relief='flat', borderwidth=0,
+            padx=8, pady=8,
+            selectbackground=self.COLORS['accent'],
+            selectforeground='#ffffff'
+        )
+        self.log_text.pack(fill='both', expand=True)
+        
+        # 配置日志标签颜色
+        self.log_text.tag_configure('trying', foreground=self.COLORS['text_secondary'])
+        self.log_text.tag_configure('success', foreground=self.COLORS['success'], font=('Consolas', 10, 'bold'))
+        self.log_text.tag_configure('fail', foreground=self.COLORS['error'])
+        self.log_text.tag_configure('timestamp', foreground=self.COLORS['text_dim'])
+        self.log_text.tag_configure('tx', foreground='#6bb9ff')
+        self.log_text.tag_configure('rx', foreground='#f9ca24')
+        
+        # 结果区域
+        result_card = tk.LabelFrame(content_frame, text=" 探测成功结果 ",
+                                    bg=self.COLORS['card_bg'],
+                                    fg=self.COLORS['accent'],
+                                    font=('Microsoft YaHei', 11, 'bold'),
+                                    padx=10, pady=10,
+                                    relief='solid', borderwidth=1)
+        result_card.grid(row=0, column=1, sticky='nsew')
+        
+        columns = ('params', 'address', 'raw')
+        self.result_tree = ttk.Treeview(result_card, columns=columns, 
+                                        show='headings', height=15,
+                                        style='Custom.Treeview')
+        self.result_tree.heading('params', text='通信参数')
+        self.result_tree.heading('address', text='地址')
+        self.result_tree.heading('raw', text='原始报文')
+        self.result_tree.column('params', width=140, anchor='center')
+        self.result_tree.column('address', width=200, anchor='center')
+        self.result_tree.column('raw', width=250, anchor='w')
+        self.result_tree.pack(fill='both', expand=True)
+        
+        # 滚动条
+        scrollbar = ttk.Scrollbar(self.result_tree, orient='vertical', 
+                                  command=self.result_tree.yview)
+        self.result_tree.configure(yscrollcommand=scrollbar.set)
+        
+        # 绑定双击复制
+        self.result_tree.bind('<Double-1>', self.on_tree_double_click)
+        
+        # 统计信息
+        self.stats_var = tk.StringVar(value="成功: 0 | 总计: 0")
+        tk.Label(result_card, textvariable=self.stats_var,
+                font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_secondary']).pack(anchor='e', pady=(5, 0))
+    
+    def _draw_status_circle(self, color):
+        """绘制串口状态指示灯"""
+        self.status_indicator.delete('all')
+        x, y = 6, 6
+        r = 5
+        self.status_indicator.create_oval(x-r, y-r, x+r, y+r, 
+                                          fill=color, outline='')
+    
+    def _create_option_row(self, parent, row, label, create_func):
+        """创建选项行"""
+        tk.Label(parent, text=label, font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_secondary']).grid(
+                    row=row, column=0, sticky='nw', pady=3)
+        frame = tk.Frame(parent, bg=self.COLORS['card_bg'])
+        frame.grid(row=row, column=1, sticky='w', padx=(8, 0), pady=3)
+        create_func(frame)
+    
+    def _create_baud_checks(self, parent):
+        """创建波特率复选框"""
         self.baud_vars = {}
         for baud in [1200, 2400, 4800, 7200, 9600, 19200, 38400, 57600, 115200]:
             var = tk.BooleanVar(value=True)
             self.baud_vars[baud] = var
-            self.create_check(self.baud_frame, str(baud), var).pack(side='left', padx=3)
-        
-        # 数据位
-        ttk.Label(scan_frame, text="数据位:").grid(row=1, column=0, sticky='nw', pady=2)
-        self.data_frame = ttk.Frame(scan_frame)
-        self.data_frame.grid(row=1, column=1, sticky='w', padx=5, pady=2)
+            self._create_modern_check(parent, str(baud), var).pack(side='left', padx=4)
+    
+    def _create_data_checks(self, parent):
+        """创建数据位复选框"""
         self.data_vars = {}
-        for val, label in [(7, '7'), (8, '8')]:
+        for val in [7, 8]:
             var = tk.BooleanVar(value=(val == 8))
             self.data_vars[val] = var
-            self.create_check(self.data_frame, label, var).pack(side='left', padx=5)
-        
-        # 校验位
-        ttk.Label(scan_frame, text="校验位:").grid(row=2, column=0, sticky='nw', pady=2)
-        self.parity_frame = ttk.Frame(scan_frame)
-        self.parity_frame.grid(row=2, column=1, sticky='w', padx=5, pady=2)
+            self._create_modern_check(parent, str(val), var).pack(side='left', padx=8)
+    
+    def _create_parity_checks(self, parent):
+        """创建校验位复选框"""
         self.parity_vars = {}
         for p, label in [('N', 'None'), ('E', 'Even'), ('O', 'Odd')]:
             var = tk.BooleanVar(value=(p == 'E'))
             self.parity_vars[p] = var
-            self.create_check(self.parity_frame, label, var).pack(side='left', padx=5)
-        
-        # 停止位
-        ttk.Label(scan_frame, text="停止位:").grid(row=3, column=0, sticky='nw', pady=2)
-        self.stop_frame = ttk.Frame(scan_frame)
-        self.stop_frame.grid(row=3, column=1, sticky='w', padx=5, pady=2)
+            self._create_modern_check(parent, label, var).pack(side='left', padx=8)
+    
+    def _create_stop_checks(self, parent):
+        """创建停止位复选框"""
         self.stop_vars = {}
-        for val, label in [(1, '1'), (2, '2')]:
+        for val in [1, 2]:
             var = tk.BooleanVar(value=(val == 1))
             self.stop_vars[val] = var
-            self.create_check(self.stop_frame, label, var).pack(side='left', padx=5)
+            self._create_modern_check(parent, str(val), var).pack(side='left', padx=8)
+    
+    def _create_modern_check(self, parent, text, var):
+        """创建现代化复选框"""
+        cb = tk.Checkbutton(parent, text=f"☐ {text}", variable=var,
+                            indicatoron=False, relief='flat',
+                            bg=self.COLORS['card_bg'], 
+                            activebackground=self.COLORS['card_bg_light'],
+                            selectcolor=self.COLORS['card_bg'],
+                            fg=self.COLORS['text'],
+                            activeforeground=self.COLORS['text'],
+                            font=('Microsoft YaHei', 10),
+                            cursor='hand2')
         
-        # 超时 + 唤醒
-        ttk.Label(scan_frame, text="等待超时(ms):").grid(row=4, column=0, sticky='w', pady=5)
-        self.timeout_var = tk.StringVar(value="1500")
-        ttk.Entry(scan_frame, textvariable=self.timeout_var, width=10).grid(row=4, column=1, sticky='w', padx=5)
+        def update(*args):
+            cb.config(text=f"☑ {text}" if var.get() else f"☐ {text}",
+                     fg=self.COLORS['accent'] if var.get() else self.COLORS['text'])
         
-        self.wakeup_var = tk.BooleanVar(value=True)
-        self.create_check(scan_frame, "先发唤醒 FE", self.wakeup_var).grid(row=4, column=2, columnspan=2, sticky='w', padx=5)
-        
-        # 按钮行
-        btn_frame = ttk.Frame(scan_frame)
-        btn_frame.grid(row=5, column=0, columnspan=6, sticky='w', pady=5)
-        
-        self.open_btn = ttk.Button(btn_frame, text="🔌 打开串口", command=self.open_serial, width=12)
-        self.open_btn.pack(side='left', padx=5)
-        
-        self.close_btn = ttk.Button(btn_frame, text="🔒 关闭串口", command=self.close_serial, width=12, state='disabled')
-        self.close_btn.pack(side='left', padx=5)
-        
-        self.scan_btn = ttk.Button(btn_frame, text="▶ 开始探测", command=self.start_scan, width=12)
-        self.scan_btn.pack(side='left', padx=5)
-        
-        self.stop_btn = ttk.Button(btn_frame, text="⏹ 停止", command=self.stop_scan, width=12, state='disabled')
-        self.stop_btn.pack(side='left', padx=5)
-        
-        self.export_btn = ttk.Button(btn_frame, text="📄 导出 CSV", command=self.export_csv, width=12, state='disabled')
-        self.export_btn.pack(side='left', padx=5)
-        
-        ttk.Button(btn_frame, text="🗑 清空", command=self.clear_log, width=8).pack(side='left', padx=5)
-        
-        # ===== 进度 =====
-        self.progress = ttk.Progressbar(self.root, mode='determinate')
-        self.progress.pack(fill='x', padx=10, pady=5)
-        
-        self.status_var = tk.StringVar(value="就绪 | 先打开串口，再开始探测")
-        ttk.Label(self.root, textvariable=self.status_var).pack(anchor='w', padx=10)
-        
-        # ===== 结果 =====
-        result_frame = ttk.LabelFrame(self.root, text="探测成功结果", padding=5)
-        result_frame.pack(fill='x', padx=10, pady=5)
-        
-        self.result_tree = ttk.Treeview(result_frame, columns=('params', 'address', 'raw'), show='headings', height=3)
-        self.result_tree.heading('params', text='通信参数')
-        self.result_tree.heading('address', text='地址')
-        self.result_tree.heading('raw', text='原始应答报文')
-        self.result_tree.column('params', width=150)
-        self.result_tree.column('address', width=250)
-        self.result_tree.column('raw', width=450)
-        self.result_tree.pack(fill='x')
+        var.trace_add('write', update)
+        return cb
     
     def refresh_ports(self):
-        ports = serial.tools.list_ports.comports()
-        port_list = [f"{p.device} - {p.description[:30]}" for p in ports]
-        self.port_combo['values'] = port_list
-        if port_list and not self.port_var.get():
-            self.port_combo.set(port_list[0])
-    
-    def log(self, msg, tag=''):
-        self.log_text.insert('end', msg + '\n', tag)
-        self.log_text.see('end')
-        self.root.update_idletasks()
-    
-    def get_port_name(self):
-        port_full = self.port_var.get()
-        return port_full.split(' - ')[0] if ' - ' in port_full else port_full
+        """刷新串口列表"""
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        self.port_combo['values'] = ports
+        if ports:
+            self.port_var.set(ports[0])
+            self.log(f"发现串口: {', '.join(ports)}")
+        else:
+            self.port_var.set('')
+            self.log("未检测到串口", 'fail')
     
     def open_serial(self):
-        port = self.get_port_name()
+        """打开串口"""
+        port = self.port_var.get()
         if not port:
-            messagebox.showwarning("提示", "请先选择串口")
+            messagebox.showwarning("警告", "请先选择串口")
             return
         try:
-            self.ser = serial.Serial(
-                port=port, baudrate=9600, bytesize=8,
-                parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
-                timeout=0.5, write_timeout=1
-            )
-            self.serial_status_var.set(f"串口: 已打开 | {port}")
+            self.ser = serial.Serial(port, timeout=1)
             self.open_btn.config(state='disabled')
             self.close_btn.config(state='normal')
-            self.log(f"串口已打开: {port}", 'info')
+            self._draw_status_circle(self.COLORS['success'])
+            self.serial_status_label.config(text=f"已连接 | {port}", fg=self.COLORS['success'])
+            self.log(f"串口已打开: {port}", 'success')
         except Exception as e:
-            messagebox.showerror("错误", f"打开串口失败: {e}")
+            self.log(f"打开串口失败: {e}", 'fail')
     
     def close_serial(self):
+        """关闭串口"""
         if self.ser and self.ser.is_open:
             self.ser.close()
         self.ser = None
-        self.serial_status_var.set("串口: 已关闭")
         self.open_btn.config(state='normal')
         self.close_btn.config(state='disabled')
-        self.log("串口已关闭", 'info')
+        self._draw_status_circle('gray')
+        self.serial_status_label.config(text="串口未连接", fg=self.COLORS['text_dim'])
+        self.log("串口已关闭")
     
-    def strip_fe_prefix(self, data):
-        i = 0
-        while i < len(data) and data[i] == 0xFE:
-            i += 1
-        return data[i:]
+    def start_scan(self):
+        """开始探测"""
+        if self.is_scanning:
+            return
+        if not self.ser or not self.ser.is_open:
+            messagebox.showwarning("警告", "请先打开串口")
+            return
+        
+        baudrates = [b for b, v in self.baud_vars.items() if v.get()]
+        databits = [d for d, v in self.data_vars.items() if v.get()]
+        parities = [p for p, v in self.parity_vars.items() if v.get()]
+        stopbits = [s for s, v in self.stop_vars.items() if v.get()]
+        
+        if not all([baudrates, databits, parities, stopbits]):
+            messagebox.showwarning("警告", "请至少勾选一种波特率、数据位、校验位和停止位")
+            return
+        
+        self.all_results.clear()
+        self.success_results.clear()
+        self.result_tree.delete(*self.result_tree.get_children())
+        self.is_scanning = True
+        self.scan_btn.config(state='disabled')
+        self.stop_btn.config(state='normal')
+        self.export_btn.config(state='disabled')
+        
+        self.scan_thread = threading.Thread(target=self.scan_worker, 
+                                            args=(baudrates, databits, parities, stopbits))
+        self.scan_thread.daemon = True
+        self.scan_thread.start()
     
-    def calc_checksum(self, data):
-        return sum(data) & 0xFF
+    def stop_scan(self):
+        """停止探测"""
+        self.is_scanning = False
+        self.scan_btn.config(state='normal')
+        self.stop_btn.config(state='disabled')
+        if self.success_results:
+            self.export_btn.config(state='normal')
+        self.log("探测已停止")
     
-    def build_read_addr_frame(self):
-        frame = bytearray([0x68, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x68, 0x13, 0x00])
-        frame.append(self.calc_checksum(frame))
-        frame.append(0x16)
-        return bytes(frame)
+    def scan_worker(self, baudrates, databits, parities, stopbits):
+        """探测工作线程"""
+        try:
+            timeout_ms = int(self.timeout_var.get() or 1500)
+        except ValueError:
+            timeout_ms = 1500
+        
+        total = len(baudrates) * len(databits) * len(parities) * len(stopbits)
+        count = 0
+        
+        for baud in baudrates:
+            if not self.is_scanning:
+                break
+            for databit in databits:
+                for parity in parities:
+                    for stopbit in stopbits:
+                        if not self.is_scanning:
+                            break
+                        
+                        count += 1
+                        params = f"{baud}/{databit}-{parity}-{stopbit}"
+                        
+                        self.root.after(0, lambda p=params, c=count, t=total: (
+                            self.status_var.set(f"正在探测: {p} ({c}/{t})"),
+                            self.progress.configure(value=(c / t) * 100)
+                        ))
+                        
+                        self.log(f"[{count}/{total}] {params} (超时{timeout_ms}ms) ...", 'trying')
+                        
+                        # 记录 TX
+                        tx_hex = self.build_read_addr_frame().hex().upper()
+                        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                        if self.wakeup_var.get():
+                            self.log(f"[{ts}] ", end='')
+                            self.log("TX: ", end='', tag='tx')
+                            self.log(f"FE FE FE FE {tx_hex}")
+                        else:
+                            self.log(f"[{ts}] ", end='')
+                            self.log("TX: ", end='', tag='tx')
+                            self.log(tx_hex)
+                        
+                        ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
+                        
+                        # 记录 RX
+                        if raw:
+                            ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                            self.log(f"[{ts_rx}] ", end='')
+                            self.log("RX: ", end='', tag='rx')
+                            self.log(raw.hex().upper())
+                        else:
+                            self.log("RX: (无应答)")
+                        
+                        result = {
+                            'baud': baud, 'databits': databit, 'parity': parity,
+                            'stopbits': stopbit, 'success': ok, 'message': msg,
+                            'raw': raw.hex().upper() if raw else '',
+                            'addr': addr,
+                            'timestamp': ts
+                        }
+                        self.all_results.append(result)
+                        
+                        if ok:
+                            self.log(f"  ✅ {msg}", 'success')
+                            self.success_results.append(result)
+                            display_addr = addr if addr else msg
+                            self.root.after(0, lambda r=result, a=display_addr: (
+                                self.result_tree.insert('', 'end', 
+                                    values=(f"{r['baud']}/{r['databits']}-{r['parity']}-{r['stopbits']}", 
+                                           a, r['raw'])),
+                                self.stats_var.set(f"成功: {len(self.success_results)} | 总计: {count}")
+                            ))
+                        else:
+                            self.log(f"  ❌ {msg}", 'fail')
+                        
+                        time.sleep(0.3)
+        
+        self.is_scanning = False
+        self.root.after(0, lambda: (
+            self.scan_btn.config(state='normal'),
+            self.stop_btn.config(state='disabled'),
+            self.export_btn.config(state='normal' if self.success_results else 'disabled'),
+            self.status_var.set(f"探测完成 | 成功 {len(self.success_results)}/{count}"),
+            self.progress.configure(value=100)
+        ))
     
     def try_params(self, baud, databits, parity, stopbits, timeout_ms):
-        """尝试一组参数，返回 (success, message, raw_bytes, addr)"""
+        """尝试一组参数"""
         addr = ''
         if not self.ser or not self.ser.is_open:
             return False, "串口未打开", b'', addr
@@ -258,7 +671,6 @@ class MeterScannerGUI:
             if cs_calc != cs_recv:
                 return False, f"校验码错误(计算{cs_calc:02X}!=收到{cs_recv:02X})", response, addr
             
-            # 从帧头地址域解析地址（DL/T 645 低字节先发，需倒序）
             addr_bytes = clean[1:7]
             addr = addr_bytes[::-1].hex().upper()
             
@@ -268,19 +680,16 @@ class MeterScannerGUI:
             cs_pos = data_start + l
             
             if len(clean) < cs_pos + 2:
-                return False, f"帧长度不足(需{cs_pos+2}, 实{len(clean)})", response, addr
+                return False, f"帧长度不足", response, addr
             
-            # 0x93 = 读地址应答（数据域里也有地址值）
             if ctrl == 0x93:
-                if l == 6 and len(clean) >= data_start + 6 + 2:
-                    return True, f"地址:{addr}", response, addr
-                elif l >= 10 and len(clean) >= data_start + 10 + 2:
+                if l >= 10 and len(clean) >= data_start + 10 + 2:
                     di = clean[data_start:data_start + 4].hex().upper()
                     return True, f"地址:{addr} DI:{di}", response, addr
+                elif l == 6 and len(clean) >= data_start + 6 + 2:
+                    return True, f"地址:{addr}", response, addr
                 else:
                     return True, f"地址:{addr}", response, addr
-            
-            # 0x91 = 读数据应答（数据域是DI+数据值，地址在帧头）
             elif ctrl == 0x91:
                 if l >= 4 and len(clean) >= data_start + 4 + 2:
                     di = clean[data_start:data_start + 4].hex().upper()
@@ -294,8 +703,6 @@ class MeterScannerGUI:
                     return True, f"地址:{addr} 数据:{data_hex}", response, addr
                 else:
                     return True, f"地址:{addr}", response, addr
-            
-            # 0xD1 = 异常应答
             elif ctrl == 0xD1:
                 return True, f"地址:{addr} 异常应答", response, addr
             else:
@@ -304,209 +711,92 @@ class MeterScannerGUI:
         except Exception as e:
             return False, str(e), b'', addr
     
-    def scan_worker(self):
-        if not self.ser or not self.ser.is_open:
-            self.log("错误: 串口未打开，请先点击【打开串口】", 'fail')
-            self.is_scanning = False
-            return
-        
-        baudrates = [b for b, v in self.baud_vars.items() if v.get()]
-        databits = [d for d, v in self.data_vars.items() if v.get()]
-        parities = [p for p, v in self.parity_vars.items() if v.get()]
-        stopbits = [s for s, v in self.stop_vars.items() if v.get()]
-        timeout_ms = int(self.timeout_var.get() or 1500)
-        
-        if not baudrates:
-            self.log("错误: 请至少选择一个波特率", 'fail')
-            self.is_scanning = False
-            return
-        if not databits:
-            self.log("错误: 请至少选择一个数据位", 'fail')
-            self.is_scanning = False
-            return
-        if not parities:
-            self.log("错误: 请至少选择一个校验位", 'fail')
-            self.is_scanning = False
-            return
-        if not stopbits:
-            self.log("错误: 请至少选择一个停止位", 'fail')
-            self.is_scanning = False
-            return
-        
-        total = len(baudrates) * len(databits) * len(parities) * len(stopbits)
-        count = 0
-        
-        self.all_results = []
-        self.success_results = []
-        
-        for item in self.result_tree.get_children():
-            self.result_tree.delete(item)
-        
-        for baud in baudrates:
-            if not self.is_scanning:
-                break
-            for databit in databits:
-                for parity in parities:
-                    for stopbit in stopbits:
-                        if not self.is_scanning:
-                            break
-                        
-                        count += 1
-                        params = f"{baud}/{databit}-{parity}-{stopbit}"
-                        
-                        self.status_var.set(f"正在探测: {params} ({count}/{total})")
-                        self.progress['value'] = (count / total) * 100
-                        self.log(f"[{count}/{total}] {params} (超时{timeout_ms}ms) ...", 'trying')
-                        
-                        # 记录 TX
-                        tx_hex = self.build_read_addr_frame().hex().upper()
-                        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                        if self.wakeup_var.get():
-                            self.log(f"[{ts}] TX: FE FE FE FE {tx_hex}")
-                        else:
-                            self.log(f"[{ts}] TX: {tx_hex}")
-                        
-                        ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
-                        
-                        # 记录 RX
-                        if raw:
-                            ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                            self.log(f"[{ts_rx}] RX: {raw.hex().upper()}")
-                        else:
-                            self.log("RX: (无应答)")
-                        
-                        result = {
-                            'baud': baud, 'databits': databit, 'parity': parity,
-                            'stopbits': stopbit, 'success': ok, 'message': msg,
-                            'raw': raw.hex().upper() if raw else '',
-                            'addr': addr,
-                            'timestamp': ts
-                        }
-                        self.all_results.append(result)
-                        
-                        if ok:
-                            self.log(f"  ✅ {msg}", 'success')
-                            self.success_results.append(result)
-                            display_addr = addr if addr else msg
-                            self.result_tree.insert('', 'end', values=(params, display_addr, raw.hex().upper()))
-                        else:
-                            self.log(f"  ❌ {msg}", 'fail')
-                        
-                        time.sleep(0.3)
-        
-        self.is_scanning = False
-        self.scan_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
-        
-        if self.success_results:
-            self.status_var.set(f"探测完成! 找到 {len(self.success_results)} 个匹配参数")
-            self.export_btn.config(state='normal')
-            self.log("\n" + "="*50, 'info')
-            self.log(f"探测完成! 共 {len(self.success_results)} 个成功组合", 'success')
-            best = self.success_results[0]
-            self.log(f"推荐参数: {best['baud']}/{best['databits']}-{best['parity']}-{best['stopbits']}", 'success')
-        else:
-            self.status_var.set("探测完成，未找到匹配参数")
-            self.log("\n未找到任何匹配的通信参数", 'fail')
-            self.log("请检查: 1.串口连接 2.电表上电 3.接线(A-A, B-B)", 'info')
-        
-        self.progress['value'] = 100
+    def build_read_addr_frame(self):
+        """构建读地址报文"""
+        return bytes([0x68, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+                     0x68, 0x13, 0x00, 0xDF, 0x16])
     
-    def start_scan(self):
-        if self.is_scanning:
-            return
-        self.is_scanning = True
-        self.scan_btn.config(state='disabled')
-        self.stop_btn.config(state='normal')
-        self.export_btn.config(state='disabled')
-        self.log_text.delete(1.0, 'end')
-        self.progress['value'] = 0
-        
-        self.scan_thread = threading.Thread(target=self.scan_worker, daemon=True)
-        self.scan_thread.start()
+    def strip_fe_prefix(self, data):
+        """去除前导 FE 字节"""
+        for i, byte in enumerate(data):
+            if byte != 0xFE:
+                return data[i:]
+        return data
     
-    def stop_scan(self):
-        self.is_scanning = False
-        self.status_var.set("用户停止探测")
-        self.log("\n用户停止探测", 'info')
+    def calc_checksum(self, data):
+        """计算校验和"""
+        return sum(data) & 0xFF
     
-    def export_csv(self):
+    def export_to_csv(self):
+        """导出 CSV"""
         if not self.all_results:
-            messagebox.showwarning("无数据", "没有扫描结果可导出")
             return
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV 文件", "*.csv"), ("所有文件", "*.*")],
-            initialfile=f"meter_scan_{timestamp}.csv",
-            title="导出扫描结果"
-        )
-        
-        if not filepath:
-            return
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         try:
-            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.writer(f)
-                writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位', 
-                                '结果', '详情', '地址', '原始应答报文', '时间戳'])
-                for i, r in enumerate(self.all_results, 1):
-                    writer.writerow([
-                        i, r['baud'], r['databits'], r['parity'], r['stopbits'],
-                        '成功' if r['success'] else '失败',
-                        r['message'], r['addr'], r['raw'], r['timestamp']
-                    ])
-            
-            if self.success_results:
-                summary_path = filepath.replace('.csv', '_success.csv')
-                with open(summary_path, 'w', newline='', encoding='utf-8-sig') as f:
+            # 完整日志
+            full_path = filedialog.asksaveasfilename(
+                title="保存完整探测日志",
+                defaultextension=".csv",
+                initialfile=f"meter_scan_full_{ts}.csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            )
+            if full_path:
+                with open(full_path, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
-                    writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位', 
+                    writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位',
+                                    '结果', '详情', '地址', '原始应答报文', '时间戳'])
+                    for i, r in enumerate(self.all_results, 1):
+                        writer.writerow([i, r['baud'], r['databits'], r['parity'],
+                                       r['stopbits'], '成功' if r['success'] else '失败',
+                                       r['message'], r['addr'], r['raw'], r['timestamp']])
+                self.log(f"完整日志已保存: {full_path}", 'success')
+            
+            # 成功摘要
+            if self.success_results:
+                success_path = full_path.replace('_full_', '_success_') if full_path else f"meter_scan_success_{ts}.csv"
+                with open(success_path, 'w', newline='', encoding='utf-8-sig') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['序号', '波特率', '数据位', '校验位', '停止位',
                                     '地址', '原始报文', '推荐'])
                     for i, r in enumerate(self.success_results, 1):
                         writer.writerow([
                             i, r['baud'], r['databits'], r['parity'], r['stopbits'],
-                            r['addr'] if r['addr'] else r['message'], r['raw'], '★ 推荐' if i == 1 else ''
+                            r['addr'] if r['addr'] else r['message'], r['raw'],
+                            '★ 推荐' if i == 1 else ''
                         ])
-                
-                messagebox.showinfo("导出成功", 
-                    f"完整日志: {filepath}\n成功摘要: {summary_path}")
-            else:
-                messagebox.showinfo("导出成功", f"文件已保存: {filepath}")
-                
+                self.log(f"成功摘要已保存: {success_path}", 'success')
+        
         except Exception as e:
-            messagebox.showerror("导出失败", str(e))
+            self.log(f"导出失败: {e}", 'fail')
+    
+    def export_csv(self):
+        """导出按钮回调"""
+        threading.Thread(target=self.export_to_csv, daemon=True).start()
     
     def clear_log(self):
-        self.log_text.delete(1.0, 'end')
-        for item in self.result_tree.get_children():
-            self.result_tree.delete(item)
-        self.all_results = []
-        self.success_results = []
-        self.export_btn.config(state='disabled')
-        self.status_var.set("已清空")
+        """清空日志"""
+        self.log_text.delete('1.0', 'end')
     
-    def on_closing(self):
-        self.close_serial()
-        self.root.destroy()
-
-
-def main():
-    root = tk.Tk()
-    style = ttk.Style()
-    style.theme_use('clam')
+    def log(self, msg, tag=''):
+        """记录日志"""
+        self.log_text.insert('end', f"{msg}\n", tag)
+        self.log_text.see('end')
     
-    app = MeterScannerGUI(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    
-    app.log_text.tag_config('success', foreground='green')
-    app.log_text.tag_config('fail', foreground='red')
-    app.log_text.tag_config('info', foreground='blue')
-    app.log_text.tag_config('trying', foreground='gray')
-    
-    root.mainloop()
+    def on_tree_double_click(self, event):
+        """双击复制结果"""
+        item = self.result_tree.selection()
+        if item:
+            values = self.result_tree.item(item[0], 'values')
+            if values:
+                text = f"{values[0]} | {values[1]} | {values[2]}"
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.log(f"已复制: {text}", 'success')
 
 
 if __name__ == '__main__':
-    main()
+    root = tk.Tk()
+    app = ModernMeterScannerGUI(root)
+    root.mainloop()
