@@ -245,6 +245,10 @@ class MeterScannerGUI:
             if cs_calc != cs_recv:
                 return False, f"校验码错误(计算{cs_calc:02X}!=收到{cs_recv:02X})", response, addr
             
+            # 从帧头地址域解析地址（DL/T 645 低字节先发，需倒序）
+            addr_bytes = clean[1:7]
+            addr = addr_bytes[::-1].hex().upper()
+            
             ctrl = clean[8]
             l = clean[9]
             data_start = 10
@@ -253,27 +257,36 @@ class MeterScannerGUI:
             if len(clean) < cs_pos + 2:
                 return False, f"帧长度不足(需{cs_pos+2}, 实{len(clean)})", response, addr
             
+            # 0x93 = 读地址应答（数据域里也有地址值）
             if ctrl == 0x93:
-                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)，或仅地址值(6B)
-                # 某些电表简化格式，L=6 直接返回地址
                 if l == 6 and len(clean) >= data_start + 6 + 2:
-                    addr_bytes = clean[data_start:data_start + 6]
-                    addr_reversed = addr_bytes[::-1].hex().upper()
-                    return True, f"地址:{addr_reversed}", response, addr_reversed
+                    return True, f"地址:{addr}", response, addr
                 elif l >= 10 and len(clean) >= data_start + 10 + 2:
                     di = clean[data_start:data_start + 4].hex().upper()
-                    addr_bytes = clean[data_start + 4:data_start + 10]
-                    addr_reversed = addr_bytes[::-1].hex().upper()
-                    return True, f"地址:{addr_reversed} DI:{di}", response, addr_reversed
+                    return True, f"地址:{addr} DI:{di}", response, addr
+                else:
+                    return True, f"地址:{addr}", response, addr
+            
+            # 0x91 = 读数据应答（数据域是DI+数据值，地址在帧头）
+            elif ctrl == 0x91:
+                if l >= 4 and len(clean) >= data_start + 4 + 2:
+                    di = clean[data_start:data_start + 4].hex().upper()
+                    data_val = clean[data_start + 4:cs_pos].hex().upper() if l > 4 else ''
+                    if data_val:
+                        return True, f"地址:{addr} DI:{di} 数据:{data_val}", response, addr
+                    else:
+                        return True, f"地址:{addr} DI:{di}", response, addr
                 elif l > 0:
                     data_hex = clean[data_start:data_start + l].hex().upper()
-                    return True, f"应答 L={l}", response, ''
+                    return True, f"地址:{addr} 数据:{data_hex}", response, addr
                 else:
-                    return True, "应答(无数据)", response, ''
+                    return True, f"地址:{addr}", response, addr
+            
+            # 0xD1 = 异常应答
             elif ctrl == 0xD1:
-                return True, "异常应答", response, addr
+                return True, f"地址:{addr} 异常应答", response, addr
             else:
-                return False, f"未知控制码{ctrl:02X}", response, addr
+                return False, f"地址:{addr} 未知控制码{ctrl:02X}", response, addr
                 
         except Exception as e:
             return False, str(e), b'', addr
