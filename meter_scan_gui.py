@@ -254,15 +254,17 @@ class MeterScannerGUI:
                 return False, f"帧长度不足(需{cs_pos+2}, 实{len(clean)})", response, addr
             
             if ctrl == 0x93:
-                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)
+                # 读数据应答: 数据域 = DI(4B) + 地址值(6B)，地址值低字节在前，需倒序
                 if l >= 10 and len(clean) >= data_start + 10 + 2:
                     di = clean[data_start:data_start + 4].hex().upper()
                     addr_bytes = clean[data_start + 4:data_start + 10]
-                    addr = addr_bytes.hex().upper()
-                    return True, f"地址:{addr} DI:{di}", response, addr
+                    # DL/T 645-2007 地址低字节在前，倒序为正序
+                    addr_reversed = addr_bytes[::-1].hex().upper()
+                    addr_raw = addr_bytes.hex().upper()
+                    return True, f"地址:{addr_reversed} DI:{di}", response, addr_reversed
                 elif l > 0:
                     data_hex = clean[data_start:data_start + l].hex().upper()
-                    return True, f"应答 L={l} 数据:{data_hex}", response, addr
+                    return True, f"应答 L={l} 数据:{data_hex}", response, ''
                 else:
                     return True, "应答(无数据)", response, addr
             elif ctrl == 0xD1:
