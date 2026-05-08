@@ -24,6 +24,19 @@ class MeterScannerGUI:
         self.build_ui()
         self.refresh_ports()
     
+    def create_check(self, parent, text, var):
+        """自定义复选框：☑ 选中 / ☐ 未选中"""
+        cb = tk.Checkbutton(parent, text=f"☐ {text}", variable=var,
+                            indicatoron=False, relief='flat',
+                            bg='#f0f0f0', activebackground='#e0e0e0',
+                            selectcolor='#f0f0f0', font=('Microsoft YaHei', 9))
+        
+        def update(*args):
+            cb.config(text=f"☑ {text}" if var.get() else f"☐ {text}")
+        
+        var.trace_add('write', update)
+        return cb
+
     def build_ui(self):
         # ===== 串口选择 =====
         port_frame = ttk.Frame(self.root)
@@ -57,7 +70,7 @@ class MeterScannerGUI:
         for baud in [1200, 2400, 4800, 7200, 9600, 19200, 38400, 57600, 115200]:
             var = tk.BooleanVar(value=True)
             self.baud_vars[baud] = var
-            ttk.Checkbutton(self.baud_frame, text=str(baud), variable=var).pack(side='left', padx=3)
+            self.create_check(self.baud_frame, str(baud), var).pack(side='left', padx=3)
         
         # 数据位
         ttk.Label(scan_frame, text="数据位:").grid(row=1, column=0, sticky='nw', pady=2)
@@ -67,7 +80,7 @@ class MeterScannerGUI:
         for val, label in [(7, '7'), (8, '8')]:
             var = tk.BooleanVar(value=(val == 8))
             self.data_vars[val] = var
-            ttk.Checkbutton(self.data_frame, text=label, variable=var).pack(side='left', padx=5)
+            self.create_check(self.data_frame, label, var).pack(side='left', padx=5)
         
         # 校验位
         ttk.Label(scan_frame, text="校验位:").grid(row=2, column=0, sticky='nw', pady=2)
@@ -77,7 +90,7 @@ class MeterScannerGUI:
         for p, label in [('N', 'None'), ('E', 'Even'), ('O', 'Odd')]:
             var = tk.BooleanVar(value=(p == 'E'))
             self.parity_vars[p] = var
-            ttk.Checkbutton(self.parity_frame, text=label, variable=var).pack(side='left', padx=5)
+            self.create_check(self.parity_frame, label, var).pack(side='left', padx=5)
         
         # 停止位
         ttk.Label(scan_frame, text="停止位:").grid(row=3, column=0, sticky='nw', pady=2)
@@ -87,7 +100,7 @@ class MeterScannerGUI:
         for val, label in [(1, '1'), (2, '2')]:
             var = tk.BooleanVar(value=(val == 1))
             self.stop_vars[val] = var
-            ttk.Checkbutton(self.stop_frame, text=label, variable=var).pack(side='left', padx=5)
+            self.create_check(self.stop_frame, label, var).pack(side='left', padx=5)
         
         # 超时 + 唤醒
         ttk.Label(scan_frame, text="等待超时(ms):").grid(row=4, column=0, sticky='w', pady=5)
@@ -95,7 +108,7 @@ class MeterScannerGUI:
         ttk.Entry(scan_frame, textvariable=self.timeout_var, width=10).grid(row=4, column=1, sticky='w', padx=5)
         
         self.wakeup_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(scan_frame, text="先发唤醒 FE", variable=self.wakeup_var).grid(row=4, column=2, columnspan=2, sticky='w', padx=5)
+        self.create_check(scan_frame, "先发唤醒 FE", self.wakeup_var).grid(row=4, column=2, columnspan=2, sticky='w', padx=5)
         
         # 按钮行
         btn_frame = ttk.Frame(scan_frame)
