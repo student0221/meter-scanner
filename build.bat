@@ -31,38 +31,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 打包 GUI 版本
+REM 打包 GUI 版本（使用 spec 文件，确保新包结构正确）
 echo [3/4] 打包 GUI 版本...
-pyinstaller ^
-    --noconfirm ^
-    --onefile ^
-    --windowed ^
-    --name "电表探测工具" ^
-    --clean ^
-    --hidden-import meter_scanner ^
-    --hidden-import meter_scanner.scanner ^
-    --hidden-import meter_scanner.protocol ^
-    --hidden-import meter_scanner.gui ^
-    --hidden-import meter_scanner.gui.app ^
-    -c "from meter_scanner.gui.app import main; main()" ^
-    2>nul
+pyinstaller --noconfirm --clean meter_scan_gui.spec
 
-REM 如果上面的方式有问题，用 spec 文件方式
-if errorlevel 1 (
-    echo [提示] 使用备用方式打包...
-    pyinstaller --noconfirm --onefile --windowed --name "电表探测工具" --clean meter_scan_gui.py
-)
-
-REM 打包 CLI 版本
+REM 如果 spec 方式失败，用 fallback 打包旧版入口
 echo [4/4] 打包 CLI 版本...
-pyinstaller ^
-    --noconfirm ^
-    --onefile ^
-    --console ^
-    --name "电表探测工具_CLI" ^
-    --clean ^
-    --hidden-import meter_scanner ^
-    meter_scan.py 2>nul
+pyinstaller --noconfirm --onefile --console --name "电表探测工具_CLI" --clean meter_scan.py
 
 echo.
 if exist "dist\电表探测工具.exe" (

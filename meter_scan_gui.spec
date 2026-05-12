@@ -3,11 +3,19 @@
 block_cipher = None
 
 a = Analysis(
-    ['meter_scan_gui.py'],
-    pathex=[],
+    ['gui_entry.py'],
+    pathex=['src'],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'meter_scanner',
+        'meter_scanner.scanner',
+        'meter_scanner.protocol',
+        'meter_scanner.gui',
+        'meter_scanner.gui.app',
+        'serial',
+        'serial.tools.list_ports',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
