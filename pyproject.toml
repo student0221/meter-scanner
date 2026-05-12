@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "meter-scanner"
+version = "1.0.0"
+description = "DL/T 645-2007 电表通信参数自动探测工具"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+gui = ["pyinstaller>=5.0"]
+dev = ["pyinstaller>=5.0"]
+
+[project.scripts]
+meter-scanner = "meter_scanner.cli:main"
+meter-scanner-gui = "meter_scanner.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
