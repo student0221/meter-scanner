@@ -34,15 +34,19 @@ class ModernMeterScannerGUI:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("DL/T 645-2007 电表通信参数探测工具")
+        self.root.title("DL/T 645-2007 电表通信参数探测工具 v1.1")
         self.root.geometry("1100x850")
         self.root.minsize(1000, 750)
         self.root.configure(bg=self.COLORS['bg'])
         
-        # 尝试设置 DPI 感知
+        # 尝试设置 DPI 感知 + 高 DPI 缩放
         try:
             from ctypes import windll
             windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            pass
+        try:
+            self.root.tk.call('tk', 'scaling', 1.5)
         except:
             pass
         
@@ -174,6 +178,13 @@ class ModernMeterScannerGUI:
         tk.Label(title_frame, text="电表通信参数探测工具", 
                 font=('Microsoft YaHei', 11),
                 bg=self.COLORS['bg'], fg=self.COLORS['text_secondary']).pack(anchor='w')
+        
+        # 关于按钮
+        tk.Button(header, text="ℹ 关于", font=('Microsoft YaHei', 9),
+                  bg=self.COLORS['bg'], fg=self.COLORS['text_dim'],
+                  activebackground=self.COLORS['bg'],
+                  relief='flat', cursor='hand2',
+                  command=self.show_about).pack(side='right', padx=(0, 10))
         
         # 串口状态指示器
         self.status_indicator = tk.Canvas(header, width=12, height=12, 
@@ -720,6 +731,16 @@ class ModernMeterScannerGUI:
         """计算校验和"""
         return sum(data) & 0xFF
     
+    def show_about(self):
+        """显示关于对话框"""
+        messagebox.showinfo(
+            "关于",
+            "DL/T 645-2007 电表通信参数探测工具 v1.1\n\n"
+            "功能：自动遍历串口参数，探测智能电表通信配置\n"
+            "支持：波特率 / 数据位 / 校验位 / 停止位组合扫描\n\n"
+            "GitHub: https://github.com/student0221/meter-scanner"
+        )
+
     def export_to_csv(self):
         """导出 CSV"""
         if not self.all_results:
