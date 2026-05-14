@@ -240,6 +240,52 @@ class ModernMeterScannerGUI:
                                    state='disabled')
         self.close_btn.grid(row=0, column=4)
         
+        # ===== 自定义报文卡片 =====
+        custom_card = tk.LabelFrame(main_frame, text=" 自定义报文 ",
+                                      bg=self.COLORS['card_bg'],
+                                      fg=self.COLORS['accent'],
+                                      font=('Microsoft YaHei', 11, 'bold'),
+                                      padx=15, pady=12,
+                                      relief='solid', borderwidth=1)
+        custom_card.pack(fill='x', pady=(0, 10))
+        
+        custom_inner = tk.Frame(custom_card, bg=self.COLORS['card_bg'])
+        custom_inner.pack(fill='x')
+        
+        # 自定义报文输入框
+        tk.Label(custom_inner, text="报文内容", font=('Microsoft YaHei', 10),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_secondary']).grid(row=0, column=0, sticky='nw')
+        
+        self.custom_frame_text = scrolledtext.ScrolledText(
+            custom_inner, wrap='word', height=3,
+            font=('Consolas', 10),
+            bg=self.COLORS['input_bg'], fg=self.COLORS['text'],
+            relief='solid', borderwidth=1,
+            highlightbackground=self.COLORS['border'],
+            highlightcolor=self.COLORS['accent'],
+            padx=8, pady=5
+        )
+        self.custom_frame_text.grid(row=0, column=1, sticky='ew', padx=(8, 0), pady=3)
+        custom_inner.columnconfigure(1, weight=1)
+        
+        # 默认填入读地址报文作为示例
+        self.custom_frame_text.insert('1.0', '68 AA AA AA AA AA AA 68 13 00 DF 16')
+        
+        # 选项行
+        option_frame = tk.Frame(custom_inner, bg=self.COLORS['card_bg'])
+        option_frame.grid(row=1, column=1, sticky='w', padx=(8, 0), pady=(5, 0))
+        
+        self.hex_send_var = tk.BooleanVar(value=True)
+        hex_cb = self._create_modern_check(option_frame, "十六进制发送 (空格分隔)", self.hex_send_var)
+        hex_cb.pack(side='left', padx=(0, 15))
+        
+        self.log_all_rx_var = tk.BooleanVar(value=True)
+        log_cb = self._create_modern_check(option_frame, "记录所有回复 (含失败)", self.log_all_rx_var)
+        log_cb.pack(side='left', padx=(0, 15))
+        
+        tk.Label(option_frame, text="留空则使用默认读地址报文", font=('Microsoft YaHei', 9),
+                bg=self.COLORS['card_bg'], fg=self.COLORS['text_dim']).pack(side='left')
+        
         # ===== 自动探测卡片 =====
         scan_card = tk.LabelFrame(main_frame, text=" 自动探测 ",
                                   bg=self.COLORS['card_bg'],
@@ -577,7 +623,8 @@ class ModernMeterScannerGUI:
                         self.log(f"[{count}/{total}] {params} (超时{timeout_ms}ms) ...", 'trying')
                         
                         # 记录 TX
-                        tx_hex = self.build_read_addr_frame().hex().upper()
+                        tx_frame = self.build_read_addr_frame()
+                        tx_hex = tx_frame.hex().upper()
                         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                         if self.wakeup_var.get():
                             self.log(f"[{ts}] TX: FE FE FE FE {tx_hex}")
@@ -585,13 +632,6 @@ class ModernMeterScannerGUI:
                             self.log(f"[{ts}] TX: {tx_hex}")
                         
                         ok, msg, raw, addr = self.try_params(baud, databit, parity, stopbit, timeout_ms)
-                        
-                        # 记录 RX
-                        if raw:
-                            ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                            self.log(f"[{ts_rx}] RX: {raw.hex().upper()}")
-                        else:
-                            self.log("RX: (无应答)")
                         
                         result = {
                             'baud': baud, 'databits': databit, 'parity': parity,
@@ -601,6 +641,22 @@ class ModernMeterScannerGUI:
                             'timestamp': ts
                         }
                         self.all_results.append(result)
+                        
+                        # 记录 RX - 只要有回复就记录
+                        ts_rx = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                        if raw:
+                            rx_hex = raw.hex().upper()
+                            self.log(f"[{ts_rx}] RX: {rx_hex}")
+                            # 无论成功与否，只要有回复就加入结果列表显示
+                            if self.log_all_rx_var.get() and not ok:
+                                display_params = f"{result['baud']}/{result['databits']}-{result['parity']}-{result['stopbits']}"
+                                display_addr = f"[{msg}]"
+                                self.root.after(0, lambda p=display_params, a=display_addr, r=rx_hex: (
+                                    self.result_tree.insert('', 'end',
+                                        values=(p, a, r)),
+                                ))
+                        else:
+                            self.log("RX: (无应答)")
                         
                         if ok:
                             self.log(f"  ✅ {msg}", 'success')
@@ -716,9 +772,25 @@ class ModernMeterScannerGUI:
             return False, str(e), b'', addr
     
     def build_read_addr_frame(self):
-        """构建读地址报文"""
+        """构建读地址报文（优先使用自定义报文）"""
+        custom_text = self.custom_frame_text.get('1.0', 'end').strip()
+        if custom_text:
+            return self.parse_custom_frame(custom_text, self.hex_send_var.get())
         return bytes([0x68, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
                      0x68, 0x13, 0x00, 0xDF, 0x16])
+    
+    def parse_custom_frame(self, text, is_hex):
+        """解析自定义报文"""
+        if is_hex:
+            # 去除所有空白和常见分隔符，然后按两个字符解析
+            cleaned = text.replace(' ', '').replace(',', '').replace(';', '').replace('\\n', '').replace('\\t', '').replace('0x', '').replace('0X', '')
+            try:
+                return bytes(int(cleaned[i:i+2], 16) for i in range(0, len(cleaned), 2) if i+2 <= len(cleaned))
+            except ValueError as e:
+                self.log(f"自定义报文解析失败: {e}", 'fail')
+                return self.build_read_addr_frame()
+        else:
+            return text.encode('utf-8')
     
     def strip_fe_prefix(self, data):
         """去除前导 FE 字节"""
