@@ -114,6 +114,7 @@ class ModernMeterScannerGUI:
 
         # ── 串口配置卡片 ──
         port_card = self._card(main, "串口配置")
+        port_card.pack(fill='x', pady=(0, 10))
         pi = tk.Frame(port_card, bg=self.C['card'])
         pi.pack(fill='x')
 
@@ -139,8 +140,40 @@ class ModernMeterScannerGUI:
                                     command=self._close_serial, state='disabled')
         self.close_btn.grid(row=0, column=4)
 
+        # ── 自定义报文卡片 ──
+        custom_card = self._card(main, "自定义报文")
+        custom_card.pack(fill='x', pady=(0, 10))
+
+        ci = tk.Frame(custom_card, bg=self.C['card'])
+        ci.pack(fill='x')
+
+        tk.Label(ci, text="报文内容", font=('Microsoft YaHei', 10),
+                 bg=self.C['card'], fg=self.C['text_sec']).grid(row=0, column=0, sticky='nw')
+
+        self.custom_frame_text = scrolledtext.ScrolledText(
+            ci, wrap='word', height=3, font=('Consolas', 10),
+            bg=self.C['input_bg'], fg=self.C['text'], relief='solid', borderwidth=1,
+            highlightbackground=self.C['border'], highlightcolor=self.C['accent'],
+            padx=8, pady=5)
+        self.custom_frame_text.grid(row=0, column=1, sticky='ew', padx=(8, 0), pady=3)
+        ci.columnconfigure(1, weight=1)
+        self.custom_frame_text.insert('1.0', '68 AA AA AA AA AA AA 68 13 00 DF 16')
+
+        opt_frame = tk.Frame(ci, bg=self.C['card'])
+        opt_frame.grid(row=1, column=1, sticky='w', padx=(8, 0), pady=(5, 0))
+
+        self.hex_send_var = tk.BooleanVar(value=True)
+        self._check(opt_frame, "十六进制发送（空格分隔）", self.hex_send_var).pack(side='left', padx=(0, 15))
+
+        self.log_all_rx_var = tk.BooleanVar(value=True)
+        self._check(opt_frame, "记录所有回复（含失败）", self.log_all_rx_var).pack(side='left', padx=(0, 15))
+
+        tk.Label(opt_frame, text="留空则使用默认读地址报文", font=('Microsoft YaHei', 9),
+                 bg=self.C['card'], fg=self.C['text_dim']).pack(side='left')
+
         # ── 自动探测卡片 ──
         scan_card = self._card(main, "自动探测")
+        scan_card.pack(fill='x', pady=(0, 10))
         si = tk.Frame(scan_card, bg=self.C['card'])
         si.pack(fill='x')
 
@@ -367,6 +400,8 @@ class ModernMeterScannerGUI:
         self.scanner.stopbits = stops
         self.scanner.timeout_ms = timeout
         self.scanner.send_wakeup = self.wakeup_var.get()
+        self.scanner.custom_frame = self._parse_custom_frame()
+        self.scanner.log_all_rx = self.log_all_rx_var.get()
 
         self.result_tree.delete(*self.result_tree.get_children())
         self.scan_btn.config(state='disabled')
@@ -408,6 +443,11 @@ class ModernMeterScannerGUI:
             self.result_tree.insert('', 'end',
                 values=(f"{result['baud']}/{result['databits']}-{result['parity']}-{result['stopbits']}",
                         display, result['raw']))
+        elif self.log_all_rx_var.get() and result['raw']:
+            display = f"[{result['message']}]"
+            self.result_tree.insert('', 'end',
+                values=(f"{result['baud']}/{result['databits']}-{result['parity']}-{result['stopbits']}",
+                        display, result['raw']))
 
     # ─── 导出 ───────────────────────────────────────────
 
@@ -436,6 +476,21 @@ class ModernMeterScannerGUI:
     def _log(self, msg, tag=''):
         self.log_text.insert('end', f"{msg}\n", tag)
         self.log_text.see('end')
+
+    def _parse_custom_frame(self):
+        """解析自定义报文输入为 bytes，留空返回 None（使用默认报文）。"""
+        text = self.custom_frame_text.get('1.0', 'end').strip()
+        if not text:
+            return None
+        if self.hex_send_var.get():
+            cleaned = text.replace(' ', '').replace(',', '').replace(';', '').replace('\n', '').replace('\t', '').replace('0x', '').replace('0X', '')
+            try:
+                return bytes(int(cleaned[i:i+2], 16) for i in range(0, len(cleaned), 2) if i+2 <= len(cleaned))
+            except ValueError:
+                self._log("自定义报文解析失败，使用默认报文", 'fail')
+                return None
+        else:
+            return text.encode('utf-8')
 
     def _clear_log(self):
         self.log_text.delete('1.0', 'end')

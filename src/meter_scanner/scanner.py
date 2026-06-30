@@ -44,6 +44,8 @@ class MeterScanner:
         stopbits: Optional[List[int]] = None,
         timeout_ms: int = 1500,
         send_wakeup: bool = True,
+        custom_frame: Optional[bytes] = None,
+        log_all_rx: bool = False,
         on_log: Optional[Callable[[str, str], None]] = None,
         on_result: Optional[Callable[[ScanResult], None]] = None,
     ):
@@ -54,6 +56,8 @@ class MeterScanner:
         self.stopbits = stopbits or STOPBITS[:]
         self.timeout_ms = timeout_ms
         self.send_wakeup = send_wakeup
+        self.custom_frame = custom_frame
+        self.log_all_rx = log_all_rx
 
         self.on_log = on_log
         self.on_result = on_result
@@ -235,11 +239,13 @@ if __name__ == '__main__':
             self._ser.reset_output_buffer()
             time.sleep(0.05)
 
+            frame = self.custom_frame if self.custom_frame else build_read_addr_frame()
+
             if self.send_wakeup:
                 self._ser.write(WAKEUP_BYTES)
                 time.sleep(0.1)
 
-            self._ser.write(build_read_addr_frame())
+            self._ser.write(frame)
             self._ser.flush()
             time.sleep(0.1)
 
@@ -292,7 +298,8 @@ if __name__ == '__main__':
             self._log(f"[{idx}/{total}] {params} (超时{self.timeout_ms}ms) ...", 'trying')
 
             # TX 日志
-            tx_hex = build_read_addr_frame().hex().upper()
+            tx_frame = self.custom_frame if self.custom_frame else build_read_addr_frame()
+            tx_hex = tx_frame.hex().upper()
             if self.send_wakeup:
                 self._log(f"TX: FE FE FE FE {tx_hex}", 'tx')
             else:

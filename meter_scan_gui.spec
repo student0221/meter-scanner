@@ -34,7 +34,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='电表通信参数探测工具',
+    name='MeterScanner',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
