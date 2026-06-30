@@ -18,6 +18,7 @@ from .protocol import (
     WAKEUP_BYTES, BAUDRATES, DATABITS, PARITIES, STOPBITS,
     PARITY_MAP, CTRL_NORMAL_RESP, CTRL_ERROR_RESP,
     calc_checksum, build_read_addr_frame, strip_fe_prefix, verify_frame,
+    extract_complete_frame,
 )
 
 # 扫描结果类型
@@ -255,7 +256,7 @@ if __name__ == '__main__':
                 if self._ser.in_waiting > 0:
                     chunk = self._ser.read(self._ser.in_waiting)
                     response += chunk
-                    if 0x16 in chunk:
+                    if extract_complete_frame(response):
                         break
                 time.sleep(0.05)
 
@@ -270,14 +271,19 @@ if __name__ == '__main__':
         except Exception as e:
             return False, f"异常: {e}", b'', ''
 
-    def _make_result(self, baud, databits, parity, stopbits, ok, msg, raw, addr):
-        return {
+    def _make_result(self, baud, databits, parity, stopbits, ok, msg, raw, addr,
+                     index=None, total=None):
+        result = {
             'baud': baud, 'databits': databits, 'parity': parity,
             'stopbits': stopbits, 'success': ok, 'message': msg,
             'raw': raw.hex().upper() if raw else '',
             'addr': addr,
             'timestamp': datetime.now().strftime("%H:%M:%S"),
         }
+        if index is not None and total is not None:
+            result['index'] = index
+            result['total'] = total
+        return result
 
     def _scan_worker(self) -> None:
         """后台扫描工作线程。"""
@@ -313,7 +319,10 @@ if __name__ == '__main__':
             else:
                 self._log("RX: (无应答)", 'rx')
 
-            result = self._make_result(baud, databits, parity, stopbits, ok, msg, raw, addr)
+            result = self._make_result(
+                baud, databits, parity, stopbits, ok, msg, raw, addr,
+                index=idx, total=total,
+            )
             self.all_results.append(result)
 
             if ok:

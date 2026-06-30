@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""兼容旧用法的 CLI 入口。"""
+"""CLI 入口 - 用于 PyInstaller 打包"""
 import sys
 from pathlib import Path
 

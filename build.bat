@@ -33,10 +33,20 @@ if errorlevel 1 (
 REM Build GUI version
 echo [3/4] Building GUI version...
 pyinstaller --noconfirm --clean meter_scan_gui.spec
+if errorlevel 1 (
+    echo [ERROR] GUI build failed
+    pause
+    exit /b 1
+)
 
 REM Build CLI version
 echo [4/4] Building CLI version...
-pyinstaller --noconfirm --onefile --console --name "MeterScanner_CLI" --clean meter_scan.py
+pyinstaller --noconfirm --onefile --console --name "MeterScanner_CLI" --paths src --clean cli_entry.py
+if errorlevel 1 (
+    echo [ERROR] CLI build failed
+    pause
+    exit /b 1
+)
 
 echo.
 if exist "dist\MeterScanner.exe" (

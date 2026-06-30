@@ -9,7 +9,10 @@ from tkinter import ttk, scrolledtext, filedialog, messagebox
 import threading
 
 from ..scanner import MeterScanner
-from ..protocol import BAUDRATES, DATABITS, PARITIES, STOPBITS
+from ..protocol import (
+    BAUDRATES, DATABITS, PARITIES, STOPBITS,
+    HexFrameError, parse_hex_frame_text,
+)
 
 
 class ModernMeterScannerGUI:
@@ -394,13 +397,19 @@ class ModernMeterScannerGUI:
         except ValueError:
             timeout = 1500
 
+        try:
+            custom_frame = self._parse_custom_frame()
+        except HexFrameError as e:
+            messagebox.showwarning("自定义报文错误", str(e))
+            return
+
         self.scanner.baudrates = bauds
         self.scanner.databits = datas
         self.scanner.parities = pars
         self.scanner.stopbits = stops
         self.scanner.timeout_ms = timeout
         self.scanner.send_wakeup = self.wakeup_var.get()
-        self.scanner.custom_frame = self._parse_custom_frame()
+        self.scanner.custom_frame = custom_frame
         self.scanner.log_all_rx = self.log_all_rx_var.get()
 
         self.result_tree.delete(*self.result_tree.get_children())
@@ -436,7 +445,8 @@ class ModernMeterScannerGUI:
     def _on_result(self, result):
         total = len(self.scanner.all_results)
         suc = len(self.scanner.success_results)
-        self.progress.configure(value=0)  # will be updated by poll
+        if result.get('total'):
+            self.progress.configure(value=(result.get('index', 0) / result['total']) * 100)
         self.stats_var.set(f"成功: {suc} | 总计: {total}")
         if result['success']:
             display = result.get('addr') or result['message']
@@ -483,12 +493,7 @@ class ModernMeterScannerGUI:
         if not text:
             return None
         if self.hex_send_var.get():
-            cleaned = text.replace(' ', '').replace(',', '').replace(';', '').replace('\n', '').replace('\t', '').replace('0x', '').replace('0X', '')
-            try:
-                return bytes(int(cleaned[i:i+2], 16) for i in range(0, len(cleaned), 2) if i+2 <= len(cleaned))
-            except ValueError:
-                self._log("自定义报文解析失败，使用默认报文", 'fail')
-                return None
+            return parse_hex_frame_text(text)
         else:
             return text.encode('utf-8')
 

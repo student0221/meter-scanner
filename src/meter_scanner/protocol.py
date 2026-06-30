@@ -4,7 +4,10 @@ DL/T 645-2007 协议层
 提供帧构造、校验、解析等底层协议功能。
 """
 
-from typing import Tuple
+import re
+from typing import Optional, Tuple
+
+from .exceptions import FrameError
 
 # 常量
 WAKEUP_BYTES = bytes([0xFE, 0xFE, 0xFE, 0xFE])
@@ -26,6 +29,10 @@ PARITY_MAP = {
 CTRL_READ_ADDR = 0x13       # 读通信地址（主站请求）
 CTRL_NORMAL_RESP = 0x93     # 正常应答（从站）
 CTRL_ERROR_RESP = 0xD1      # 异常应答（从站）
+
+
+class HexFrameError(FrameError):
+    """自定义十六进制报文格式错误。"""
 
 
 def calc_checksum(data: bytes | bytearray) -> int:
@@ -55,6 +62,35 @@ def strip_fe_prefix(data: bytes) -> bytes:
     return data
 
 
+def parse_hex_frame_text(text: str) -> bytes:
+    """解析用户输入的十六进制报文。"""
+    cleaned = re.sub(r'[\s,;]+', '', text).replace('0x', '').replace('0X', '')
+    if not cleaned:
+        raise HexFrameError("自定义报文不能为空")
+    if len(cleaned) % 2 != 0:
+        raise HexFrameError("十六进制字符数量必须为偶数")
+    if re.search(r'[^0-9a-fA-F]', cleaned):
+        raise HexFrameError("自定义报文包含非十六进制字符")
+    return bytes.fromhex(cleaned)
+
+
+def extract_complete_frame(data: bytes) -> Optional[bytes]:
+    """按 DL/T 645 长度字段提取第一帧完整报文。"""
+    clean = strip_fe_prefix(data)
+    if len(clean) < 10:
+        return None
+    if clean[0] != 0x68 or len(clean) > 7 and clean[7] != 0x68:
+        return None
+    data_len = clean[9]
+    frame_len = 12 + data_len
+    if len(clean) < frame_len:
+        return None
+    frame = clean[:frame_len]
+    if frame[-1] != 0x16:
+        return None
+    return frame
+
+
 def verify_frame(data: bytes) -> Tuple[bool, str, str]:
     """验证并解析 DL/T 645 应答帧。
 
@@ -67,7 +103,9 @@ def verify_frame(data: bytes) -> Tuple[bool, str, str]:
         - message: 解析结果描述
         - addr_hex: 电表地址（十六进制字符串，低位在前）
     """
-    clean = strip_fe_prefix(data)
+    clean = extract_complete_frame(data)
+    if clean is None:
+        clean = strip_fe_prefix(data)
 
     if len(clean) < 12:
         return False, f"帧长度不足({len(clean)}字节)", ""
@@ -96,9 +134,9 @@ def verify_frame(data: bytes) -> Tuple[bool, str, str]:
         return True, f"正常应答 | 地址: {addr_str}", addr_str
     elif ctrl == CTRL_ERROR_RESP:
         err = clean[10] if len(clean) > 10 else 0
-        return True, f"异常应答 | 错误码: {err:02X}", addr_str
+        return False, f"异常应答 | 错误码: {err:02X}", addr_str
     else:
-        return True, f"应答控制码: {ctrl:02X} | 地址: {addr_str}", addr_str
+        return False, f"未知应答控制码: {ctrl:02X} | 地址: {addr_str}", addr_str
 
 
 def frame_to_hex(data: bytes) -> str:
